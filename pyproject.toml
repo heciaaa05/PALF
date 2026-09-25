@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "palf"
+version = "0.1.0"
+description = "Pattern-Aware Learning Framework for time-series forecasting"
+requires-python = ">=3.10"
+dependencies = ["torch", "numpy", "pandas<3", "matplotlib", "streamlit"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
