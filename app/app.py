@@ -2,19 +2,30 @@ import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
 
-from palf.data import prepare_data
+from palf.data import prepare_data, prepare_weather_data
 from palf.models import MODEL_REGISTRY, MODEL_INFO
 from palf.training.trainer import train_model
 
 MAX_RESULTS = 4
+WEATHER_TARGETS = {
+    "T (degC) - nhiệt độ": "T (degC)",
+    "rh (%) - độ ẩm": "rh (%)",
+    "p (mbar) - áp suất": "p (mbar)",
+    "wv (m/s) - tốc độ gió": "wv (m/s)",
+}
 
 st.set_page_config(page_title="PALF Trainer", layout="wide")
 st.title("PALF – Huấn luyện mô hình dự báo chuỗi thời gian")
 
 
 @st.cache_resource
-def load_data():
+def load_synthetic():
     return prepare_data()
+
+
+@st.cache_resource
+def load_weather(target_col):
+    return prepare_weather_data(target_col=target_col)
 
 
 if "results" not in st.session_state:
@@ -27,15 +38,11 @@ def render_summary(results):
     if len(results) < 2:
         return
     rows = [{
-        "Run": f"#{r['run_id']}",
-        "Model": r["model_name"],
-        "Epoch": r["config"]["epochs"],
-        "LR": r["config"]["lr"],
-        "Test MSE": round(r["test"]["mse"], 4),
-        "Test MAE": round(r["test"]["mae"], 4),
-        "Best epoch": r["best_epoch"],
-        "Tham số": r["params"],
-        "Thời gian (s)": round(r["elapsed"], 1),
+        "Run": f"#{r['run_id']}", "Nguồn": r["config"]["source"],
+        "Model": r["model_name"], "Epoch": r["config"]["epochs"],
+        "LR": r["config"]["lr"], "Test MSE": round(r["test"]["mse"], 4),
+        "Test MAE": round(r["test"]["mae"], 4), "Best epoch": r["best_epoch"],
+        "Tham số": r["params"], "Thời gian (s)": round(r["elapsed"], 1),
     } for r in results]
     st.markdown("**So sánh các lần train**")
     st.dataframe(pd.DataFrame(rows), hide_index=True)
@@ -45,10 +52,11 @@ def render_result(res):
     rid = res["run_id"]
     cfg = res["config"]
     with st.container(border=True):
-        st.subheader(f"#{rid} · {res['model_name']}")
+        st.subheader(f"#{rid} · {res['model_name']} · {cfg['source']}")
+        extra = f" · biến mục tiêu {cfg['target_col']}" if cfg.get("target_col") else ""
         st.caption(
             f"{cfg['epochs']} epoch · batch {cfg['batch']} · lr {cfg['lr']:g} · "
-            f"seed {cfg['seed']} · thiết bị {cfg['device']}"
+            f"seed {cfg['seed']} · thiết bị {cfg['device']}{extra}"
         )
         c = st.columns(5)
         c[0].metric("Test MSE", f"{res['test']['mse']:.4f}")
@@ -96,6 +104,13 @@ def render_result(res):
 
 
 with st.sidebar:
+    st.header("Dữ liệu")
+    source = st.radio("Nguồn dữ liệu", ["Giả lập (nhanh)", "Thời tiết thật (Jena, Đức)"])
+    target_label = None
+    if source != "Giả lập (nhanh)":
+        target_label = st.selectbox("Biến mục tiêu", list(WEATHER_TARGETS.keys()))
+        st.caption("Lần đầu chọn sẽ tải bộ dữ liệu Jena Climate về data/raw/ (chỉ tải một lần).")
+
     st.header("Cấu hình")
     model_name = st.selectbox("Loại model", list(MODEL_REGISTRY.keys()))
     st.caption(MODEL_INFO[model_name])
@@ -111,7 +126,7 @@ with st.sidebar:
 if clear:
     st.session_state["results"] = []
 
-live = st.container()  # khu vực tiến trình, luôn nằm trên cùng
+live = st.container()
 
 results = st.session_state["results"]
 if results:
@@ -122,8 +137,19 @@ for r in results:
     render_result(r)
 
 if run:
-    data = load_data()
+    target_col = WEATHER_TARGETS[target_label] if target_label else None
     with live:
+        if source == "Giả lập (nhanh)":
+            data = load_synthetic()
+            target_idx = 0
+            out_root = "experiments/results/synthetic"
+        else:
+            with st.spinner("Đang tải / xử lý dữ liệu Jena Climate..."):
+                train, val, test, th, meta = load_weather(target_col)
+            data = (train, val, test, th)
+            target_idx = meta["target_idx"]
+            out_root = "experiments/results/weather"
+
         st.subheader(f"Đang train: {model_name}")
         bar = st.progress(0.0)
         status = st.empty()
@@ -142,7 +168,8 @@ if run:
         try:
             res = train_model(model_name, epochs=epochs, batch=batch, lr=lr,
                               device_name=device_name, seed=int(seed),
-                              data=data, on_epoch=on_epoch)
+                              data=data, on_epoch=on_epoch, out_root=out_root,
+                              target_idx=target_idx)
         except Exception as e:
             st.error("Train thất bại")
             st.exception(e)
@@ -150,8 +177,8 @@ if run:
 
     st.session_state["run_counter"] += 1
     res["run_id"] = st.session_state["run_counter"]
-    res["config"] = {"epochs": epochs, "batch": batch, "lr": lr,
-                     "seed": int(seed), "device": device_name}
+    res["config"] = {"epochs": epochs, "batch": batch, "lr": lr, "seed": int(seed),
+                     "device": device_name, "source": source, "target_col": target_col}
     st.session_state["results"].insert(0, res)
     del st.session_state["results"][MAX_RESULTS:]
     st.rerun()

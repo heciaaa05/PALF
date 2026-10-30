@@ -16,7 +16,9 @@ def get_device(name):
         return torch_directml.device()
     if name == "cuda":
         return torch.device("cuda")
-    return torch.device("cpu")
+    if name == "cpu":
+        return torch.device("cpu")
+    raise ValueError(f"Thiet bi '{name}' khong hop le. Chon: cpu, cuda, dml.")
 
 
 @torch.no_grad()
@@ -29,7 +31,11 @@ def predict(model, ds, device, bs=512):
 
 
 def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
-                seed=42, data=None, on_epoch=None, out_root="experiments/results"):
+                seed=42, data=None, on_epoch=None, out_root="experiments/results",
+                target_idx=0, patience=None):
+    """patience=None (mac dinh): chay du `epochs`, khong doi so voi truoc day.
+    patience=so nguyen duong: dung som neu val_loss khong cai thien sau
+    `patience` epoch lien tiep, dung checkpoint tot nhat da luu."""
     torch.manual_seed(seed)
     np.random.seed(seed)
     device = get_device(device_name)
@@ -42,7 +48,8 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
     y_test = test.tensors[1].numpy()
     L, H = train.tensors[0].shape[1], train.tensors[1].shape[1]
 
-    model = build_model(model_name, input_len=L, horizon=H).to(device)
+    input_dim = train.tensors[0].shape[-1]
+    model = build_model(model_name, input_len=L, horizon=H, input_dim=input_dim).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     loader = DataLoader(train, batch_size=batch, shuffle=True)
     monitor = LearningDynamicsMonitor(pat_train, pat_val)
@@ -51,6 +58,9 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
     history = []
     best = {"val": float("inf"), "state": None, "epoch": 0}
     t0 = time.time()
+    epochs_since_improve = 0
+    stopped_early = False
+    epochs_run = 0
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -79,11 +89,22 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
             "elapsed": time.time() - t0,
         }
         history.append(row)
-        if row["val_loss"] < best["val"]:
+
+        improved = row["val_loss"] < best["val"]
+        if improved:
             best = {"val": row["val_loss"], "epoch": epoch,
                     "state": {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}}
+            epochs_since_improve = 0
+        else:
+            epochs_since_improve += 1
+
         if on_epoch:
             on_epoch(row, epochs)
+
+        epochs_run = epoch
+        if patience is not None and epochs_since_improve >= patience:
+            stopped_early = True
+            break
 
     model.load_state_dict(best["state"])
     pred = predict(model, test, device)
@@ -104,7 +125,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
         if len(ids) == 0:
             continue
         i = ids[len(ids) // 2]
-        examples[name] = {"x": test.tensors[0][i, :, 0].numpy(), "y": y_test[i], "pred": pred[i]}
+        examples[name] = {"x": test.tensors[0][i, :, target_idx].numpy(), "y": y_test[i], "pred": pred[i]}
 
     out_dir = os.path.join(out_root, model_name)
     os.makedirs(out_dir, exist_ok=True)
@@ -119,6 +140,8 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
         "elapsed": time.time() - t0,
         "best_epoch": best["epoch"],
         "best_val": best["val"],
+        "stopped_early": stopped_early,
+        "epochs_run": epochs_run,
         "history": hist_df,
         "pattern_log": pd.DataFrame(monitor.rows),
         "test": {"mse": float(se.mean()), "mae": float(ae.mean()),
