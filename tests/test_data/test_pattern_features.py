@@ -85,6 +85,25 @@ def test_wind_direction_components_are_unit_circle():
     assert np.isclose(out["wd_sin"].iloc[1], 1.0)
 
 
+def test_delta_raw_minus_resid_is_climate_at_endpoints():
+    n, L, H = 24 * 40, 48, 6
+    idx = pd.date_range("2012-01-01", periods=n, freq="h")
+    hour = np.asarray(idx.hour)
+    df = pd.DataFrame({
+        "p (mbar)": 1000 + 2 * np.sin(2 * np.pi * hour / 24),
+        "T (degC)": 10 + 8 * np.sin(2 * np.pi * hour / 24),
+        "rh (%)": 60 + 10 * np.cos(2 * np.pi * hour / 24),
+        "wv (m/s)": 2 + 0.05 * hour,
+    }, index=idx)
+    sp = window_split(n, L, H)
+    feats, clim = build_feature_table(df, CH, L, sp["n_windows"], sp["train_rows"], "hour")
+    j = np.arange(sp["n_windows"])
+    for short, col in CH.items():
+        c = clim[col].to_numpy(dtype=float)
+        got = feats[f"{short}__delta__raw"].to_numpy() - feats[f"{short}__delta__resid"].to_numpy()
+        assert np.allclose(got, c[j + L - 1] - c[j])
+
+
 def test_variance_explained_extremes():
     g = np.array([0, 1] * 50)
     assert np.isclose(variance_explained(g.astype(float), g), 1.0)

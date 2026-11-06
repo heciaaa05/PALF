@@ -1,0 +1,6 @@
+label,share_train,n_train,n_val,n_test,min_n,share>=2%,share>=5%,min_n>=300,C2
+spike,0.011637165431493844,570,95,0,0,False,False,False,False
+pressure_drop,0.0990588187256283,4852,1067,938,938,True,True,True,True
+humidity_rise,0.08742165329413445,4282,876,789,789,True,True,True,True
+heat_anomaly,0.07921438925297565,3880,962,1036,962,True,True,True,True
+cold_anomaly,0.08244012984626692,4038,125,250,125,True,True,False,False

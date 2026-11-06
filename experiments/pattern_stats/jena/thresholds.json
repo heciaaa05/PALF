@@ -16,7 +16,7 @@
   "train_rows": 49076,
   "gap": 119,
   "clim": "month_hour",
-  "quantiles": {
+  "feature_quantiles_train": {
     "p (mbar)|delta|raw": {
       "p01": -25.46200000000001,
       "p05": -16.149999999999977,
@@ -325,5 +325,165 @@
       "p95": 1.1310236111111112,
       "p99": 1.9434252867383484
     }
+  },
+  "rules": {
+    "A": {
+      "spike": {
+        "feature": "T__jump__resid",
+        "op": ">=",
+        "quantile": 0.99,
+        "threshold": 7.6910555555555575
+      },
+      "pressure_drop": {
+        "feature": "p__delta__resid",
+        "op": "<=",
+        "quantile": 0.1,
+        "threshold": -12.218983957219052
+      },
+      "humidity_rise": {
+        "feature": "rh__delta__resid",
+        "op": ">=",
+        "quantile": 0.9,
+        "threshold": 20.42802004716981
+      },
+      "heat_anomaly": {
+        "feature": "T__anom",
+        "op": ">=",
+        "quantile": 0.9,
+        "threshold": 4.740467069892474
+      },
+      "cold_anomaly": {
+        "feature": "T__anom",
+        "op": "<=",
+        "quantile": 0.1,
+        "threshold": -4.61018682795699
+      }
+    },
+    "B": {
+      "spike": {
+        "feature": "T__jump__raw",
+        "op": ">=",
+        "quantile": 0.99,
+        "threshold": 8.24
+      },
+      "pressure_drop": {
+        "feature": "p__delta__raw",
+        "op": "<=",
+        "quantile": 0.1,
+        "threshold": -12.190000000000055
+      },
+      "humidity_rise": {
+        "feature": "rh__delta__raw",
+        "op": ">=",
+        "quantile": 0.9,
+        "threshold": 20.689999999999998
+      },
+      "heat_anomaly": {
+        "feature": "T__mean__raw",
+        "op": ">=",
+        "quantile": 0.9,
+        "threshold": 18.82197916666667
+      },
+      "cold_anomaly": {
+        "feature": "T__mean__raw",
+        "op": "<=",
+        "quantile": 0.1,
+        "threshold": -1.6303124999999998
+      }
+    }
+  },
+  "cold_front": [
+    {
+      "mode": "A",
+      "tag": "resid",
+      "q_turn": 0.75,
+      "thr_leg": 5.3700000000000045,
+      "q_cool": 0.1,
+      "thr_t_delta": -7.009838709677419,
+      "q_wind": 0.9,
+      "thr_wd": 160.05000000000004,
+      "thr_wv": 3.217446808510638
+    },
+    {
+      "mode": "B",
+      "tag": "raw",
+      "q_turn": 0.75,
+      "thr_leg": 5.349999999999909,
+      "q_cool": 0.1,
+      "thr_t_delta": -6.81,
+      "q_wind": 0.9,
+      "thr_wd": 160.05000000000004,
+      "thr_wv": 3.23
+    }
+  ],
+  "zscore_train": {
+    "A": {
+      "spike": {
+        "mean_train": 2.99481620481856,
+        "std_train": 1.3797162785479915,
+        "op": ">=",
+        "feature": "T__jump__resid"
+      },
+      "pressure_drop": {
+        "mean_train": -0.02242944805830588,
+        "std_train": 9.963058808363451,
+        "op": "<=",
+        "feature": "p__delta__resid"
+      },
+      "humidity_rise": {
+        "mean_train": 0.015601206126195684,
+        "std_train": 16.422913441238023,
+        "op": ">=",
+        "feature": "rh__delta__resid"
+      },
+      "heat_anomaly": {
+        "mean_train": 0.003756682651402776,
+        "std_train": 3.7248262549222173,
+        "op": ">=",
+        "feature": "T__anom"
+      },
+      "cold_anomaly": {
+        "mean_train": 0.003756682651402776,
+        "std_train": 3.7248262549222173,
+        "op": "<=",
+        "feature": "T__anom"
+      }
+    },
+    "B": {
+      "spike": {
+        "mean_train": 3.4570525305730797,
+        "std_train": 1.3963944665653176,
+        "op": ">=",
+        "feature": "T__jump__raw"
+      },
+      "pressure_drop": {
+        "mean_train": -0.02067270982625914,
+        "std_train": 9.982456683358672,
+        "op": "<=",
+        "feature": "p__delta__raw"
+      },
+      "humidity_rise": {
+        "mean_train": -0.012131030399542697,
+        "std_train": 16.619619208212274,
+        "op": ">=",
+        "feature": "rh__delta__raw"
+      },
+      "heat_anomaly": {
+        "mean_train": 9.114424128318463,
+        "std_train": 7.82835620025264,
+        "op": ">=",
+        "feature": "T__mean__raw"
+      },
+      "cold_anomaly": {
+        "mean_train": 9.114424128318463,
+        "std_train": 7.82835620025264,
+        "op": "<=",
+        "feature": "T__mean__raw"
+      }
+    }
+  },
+  "n_z_ties": {
+    "A": 0,
+    "B": 0
   }
 }

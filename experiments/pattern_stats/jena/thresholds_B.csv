@@ -1,0 +1,6 @@
+rule,feature,op,quantile,threshold
+spike,T__jump__raw,>=,0.99,8.24
+pressure_drop,p__delta__raw,<=,0.1,-12.190000000000055
+humidity_rise,rh__delta__raw,>=,0.9,20.689999999999998
+heat_anomaly,T__mean__raw,>=,0.9,18.82197916666667
+cold_anomaly,T__mean__raw,<=,0.1,-1.6303124999999998
