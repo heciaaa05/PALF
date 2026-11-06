@@ -5,6 +5,32 @@
   "subsample": 6,
   "clim": "month_hour",
   "purge": null,
+  "spike_channel": "T",
+  "q_spike": 0.99,
+  "q_low": 0.1,
+  "q_high": 0.9,
+  "priority": [
+    "spike",
+    "pressure_drop",
+    "humidity_rise",
+    "heat_anomaly",
+    "cold_anomaly"
+  ],
+  "q_turn": 0.75,
+  "q_cool": 0.1,
+  "q_wind": 0.9,
+  "c2_min_share": 0.02,
+  "c2_target_share": 0.05,
+  "c2_min_count": 300,
+  "c3_max_normal": 0.7,
+  "c3_target_normal": 0.6,
+  "c4_max_rel_dev": 0.5,
+  "sens_pp": [
+    1,
+    2
+  ],
+  "n_samples": 8,
+  "seed": 0,
   "out": "experiments/pattern_stats/jena",
   "n_rows": 70092,
   "n_windows": 69973,
@@ -23,5 +49,14 @@
       69973
     ]
   },
-  "n_wv_sensor_errors_set_to_zero": 7
+  "train_rows": 49076,
+  "n_wv_cells_below_-900_set_to_zero": 7,
+  "wd_column": "wd (deg)",
+  "statistics": "physical units after wv<-900 set to 0; quantiles, climatology, z from train only",
+  "features_use_y": false,
+  "z_tie_break": "earlier rule in --priority",
+  "cold_front_declared": "front_dir = sign(d1)!=sign(d2) AND min(|d1|,|d2|)>=train quantile q_turn AND delta_T<=train quantile q_cool AND circular |wd_end-wd_start|>=train quantile q_wind. d1=p_mid-p_start, d2=p_end-p_mid, mid=L//2. Cach A dung chuoi phan du cho p va T; Cach B dung chuoi tho. Huong gio luon la hieu vong qua atan2(sin, cos), khong phai hieu tho.",
+  "other_cold_front_counts_are_not_a_ranking": true,
+  "sample_population": "train windows",
+  "run_length_population": "within each split; purge gap is not inside a split"
 }
