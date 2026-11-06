@@ -1,0 +1,43 @@
+{
+  "csv": null,
+  "L": 96,
+  "H": 24,
+  "subsample": 6,
+  "clim": "month_hour",
+  "purge": null,
+  "spike_channel": "T",
+  "q_spike": 0.99,
+  "q_low": 0.1,
+  "q_high": 0.9,
+  "priority": [
+    "spike",
+    "pressure_drop",
+    "humidity_rise",
+    "heat_anomaly",
+    "cold_anomaly"
+  ],
+  "c2_min_share": 0.02,
+  "c2_target_share": 0.05,
+  "c2_min_count": 300,
+  "c3_max_normal": 0.7,
+  "c3_target_normal": 0.6,
+  "c4_max_rel_dev": 0.5,
+  "out": "experiments/pattern_stats/jena",
+  "n_windows": 69973,
+  "gap": 119,
+  "spans": {
+    "train": [
+      0,
+      48981
+    ],
+    "val": [
+      49100,
+      59477
+    ],
+    "test": [
+      59596,
+      69973
+    ]
+  },
+  "n_wv_sensor_errors_set_to_zero": 7
+}

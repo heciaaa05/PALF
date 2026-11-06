@@ -1,0 +1,7 @@
+pattern,channel,feature,op,quantile,threshold
+pressure_drop,p (mbar),delta,<=,0.1,-1.2464012903225694
+rapid_cooling,T (degC),delta,<=,0.1,-1.8829218044156024
+rapid_warming,T (degC),delta,>=,0.9,1.8578448028673842
+heat_wave,T (degC),roll_mean,>=,0.9,5.447312246117087
+humidity_surge,rh (%),delta,>=,0.9,8.475591111111113
+wind_gust,wv (m/s),level,>=,0.99,4.650509027657984

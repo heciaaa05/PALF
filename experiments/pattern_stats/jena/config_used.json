@@ -1,0 +1,27 @@
+{
+  "csv": null,
+  "L": 96,
+  "H": 24,
+  "subsample": 6,
+  "clim": "month_hour",
+  "purge": null,
+  "out": "experiments/pattern_stats/jena",
+  "n_rows": 70092,
+  "n_windows": 69973,
+  "gap": 119,
+  "spans": {
+    "train": [
+      0,
+      48981
+    ],
+    "val": [
+      49100,
+      59477
+    ],
+    "test": [
+      59596,
+      69973
+    ]
+  },
+  "n_wv_sensor_errors_set_to_zero": 7
+}

@@ -1,0 +1,32 @@
+{
+  "spike": {
+    "feature": "T__jump__resid",
+    "op": ">=",
+    "quantile": 0.99,
+    "threshold": 7.6910555555555575
+  },
+  "pressure_drop": {
+    "feature": "p__delta__resid",
+    "op": "<=",
+    "quantile": 0.1,
+    "threshold": -12.218983957219052
+  },
+  "humidity_rise": {
+    "feature": "rh__delta__resid",
+    "op": ">=",
+    "quantile": 0.9,
+    "threshold": 20.42802004716981
+  },
+  "heat_anomaly": {
+    "feature": "T__anom",
+    "op": ">=",
+    "quantile": 0.9,
+    "threshold": 4.740467069892474
+  },
+  "cold_anomaly": {
+    "feature": "T__anom",
+    "op": "<=",
+    "quantile": 0.1,
+    "threshold": -4.61018682795699
+  }
+}

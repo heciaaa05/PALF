@@ -1,0 +1,7 @@
+,pressure_drop,rapid_cooling,rapid_warming,heat_wave,humidity_surge,wind_gust
+pressure_drop,4911,103,916,385,219,202
+rapid_cooling,103,4919,0,1048,3492,9
+rapid_warming,916,0,4904,774,0,53
+heat_wave,385,1048,774,4906,879,17
+humidity_surge,219,3492,0,879,4922,15
+wind_gust,202,9,53,17,15,492
