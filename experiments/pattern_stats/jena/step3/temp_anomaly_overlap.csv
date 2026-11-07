@@ -1,0 +1,5 @@
+,spike,pressure_drop,humidity_rise,temp_anomaly
+spike,570,29,42,97
+pressure_drop,29,4899,521,1191
+humidity_rise,42,521,4899,943
+temp_anomaly,97,1191,943,9798

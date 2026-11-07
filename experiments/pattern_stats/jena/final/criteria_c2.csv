@@ -1,0 +1,4 @@
+label,share_train,n_train,n_val,n_test,min_n,runs_train,runs_val,runs_test,min_runs,C2_cua_so,C2_su_kien,C2_toan_dien
+pressure_drop,0.10001837447173394,4899,1071,929,929,185,36,36,36,True,True,True
+humidity_net_rise,0.08938159694575448,4378,879,776,776,879,190,171,171,True,True,True
+temp_anomaly,0.15926583777383066,7801,1337,1730,1337,287,44,54,44,True,True,True

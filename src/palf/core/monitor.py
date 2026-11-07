@@ -3,15 +3,16 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn.functional as F
-from palf.data import PATTERNS
+from palf.data.synthetic import PATTERNS
 
 
 class LearningDynamicsMonitor:
     """Ghi loss tung sample theo epoch, tong hop theo pattern (kieu Dataset Cartography)."""
 
-    def __init__(self, pat_train, pat_val):
+    def __init__(self, pat_train, pat_val, pattern_names=None):
         self.pat = np.asarray(pat_train)
         self.val_pat = np.asarray(pat_val)
+        self.pattern_names = list(pattern_names) if pattern_names is not None else PATTERNS
         self.n = len(self.pat)
         self.loss_hist = []
         self.rows = []
@@ -25,7 +26,7 @@ class LearningDynamicsMonitor:
 
     def end_epoch(self, epoch, val_losses, grad_norms):
         self.loss_hist.append(self._cur.copy())
-        for p, name in enumerate(PATTERNS):
+        for p, name in enumerate(self.pattern_names):
             m = self.pat == p
             if m.sum() == 0:
                 continue
@@ -48,7 +49,7 @@ class LearningDynamicsMonitor:
         h = np.stack(self.loss_hist)  # (epochs, n)
         carto = pd.DataFrame({
             "idx": np.arange(self.n),
-            "pattern": [PATTERNS[p] for p in self.pat],
+            "pattern": [self.pattern_names[p] for p in self.pat],
             "mean_loss": h.mean(0),
             "std_loss": h.std(0),
         })
@@ -56,10 +57,12 @@ class LearningDynamicsMonitor:
         return df
 
 
-def build_probe(ds, pat_train, k=256, seed=0):
+def build_probe(ds, pat_train, k=256, seed=0, pattern_names=None):
+    if pattern_names is None:
+        pattern_names = PATTERNS
     rng = np.random.default_rng(seed)
     probe = {}
-    for p, name in enumerate(PATTERNS):
+    for p, name in enumerate(pattern_names):
         ids = np.where(pat_train == p)[0]
         if len(ids) == 0:
             continue

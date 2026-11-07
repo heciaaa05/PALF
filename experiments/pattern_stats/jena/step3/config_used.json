@@ -1,0 +1,55 @@
+{
+  "csv": "data/raw/jena_climate_2009_2016.csv",
+  "out": "experiments/pattern_stats/jena/step3",
+  "seed": 0,
+  "L": 96,
+  "H": 24,
+  "subsample": 6,
+  "clim": "month_hour",
+  "purge": null,
+  "spike_channel": "T",
+  "q_spike_list": [
+    0.95,
+    0.97,
+    0.98,
+    0.99
+  ],
+  "q_low": 0.1,
+  "q_high": 0.9,
+  "q_turn": 0.75,
+  "c2_min_share": 0.02,
+  "c2_target_share": 0.05,
+  "c2_min_count": 300,
+  "c2_min_runs_train": 20,
+  "c2_min_runs_val": 5,
+  "c2_min_runs_test": 5,
+  "c3_max_normal": 0.7,
+  "c3_target_normal": 0.6,
+  "c4_max_rel_dev": 0.5,
+  "mode": "A",
+  "mode_description": "Cach A - dac trung phan du so voi khi hau month_hour",
+  "n_rows": 70092,
+  "n_windows": 69973,
+  "spans": {
+    "train": [
+      0,
+      48981
+    ],
+    "val": [
+      49100,
+      59477
+    ],
+    "test": [
+      59596,
+      69973
+    ]
+  },
+  "train_rows": 49076,
+  "gap": 119,
+  "n_wv_err_fixed": 7,
+  "c2_event_thresholds": {
+    "min_runs_train": 20,
+    "min_runs_val": 5,
+    "min_runs_test": 5
+  }
+}

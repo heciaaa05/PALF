@@ -1,0 +1,5 @@
+label,share_train,n_train,n_val,n_test,min_n,share>=2%,share>=5%,min_n>=300,C2
+spike,0.011637165431493844,570,95,0,0,False,False,False,False
+pressure_drop,0.09942630816030706,4870,1071,929,929,True,True,True,True
+humidity_rise,0.08852412159817072,4336,862,776,776,True,True,True,True
+temp_anomaly,0.1582450337886119,7751,1337,1730,1337,True,True,True,True

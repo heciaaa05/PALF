@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from palf.data import prepare_data, PATTERNS
+from palf.data.synthetic import prepare_data, PATTERNS
 from palf.models import build_model, count_params
 from palf.core.monitor import LearningDynamicsMonitor, build_probe, probe_grad_norms
 
@@ -32,14 +32,22 @@ def predict(model, ds, device, bs=512):
 
 def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
                 seed=42, data=None, on_epoch=None, out_root="experiments/results",
-                target_idx=0, patience=None):
+                target_idx=0, patience=None, pattern_names=None):
     """patience=None (mac dinh): chay du `epochs`, khong doi so voi truoc day.
     patience=so nguyen duong: dung som neu val_loss khong cai thien sau
     `patience` epoch lien tiep, dung checkpoint tot nhat da luu."""
     torch.manual_seed(seed)
     np.random.seed(seed)
     device = get_device(device_name)
-    train, val, test, th = data if data is not None else prepare_data()
+    train, val, test, th = data[:4] if data is not None else prepare_data()
+
+    if pattern_names is None:
+        if data is not None and len(data) >= 5 and isinstance(data[4], dict) and "pattern_names" in data[4]:
+            pattern_names = data[4]["pattern_names"]
+        elif isinstance(th, dict) and "pattern_names" in th:
+            pattern_names = th["pattern_names"]
+        else:
+            pattern_names = PATTERNS
 
     pat_train = train.tensors[2].numpy()
     pat_val = val.tensors[2].numpy()
@@ -52,8 +60,8 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
     model = build_model(model_name, input_len=L, horizon=H, input_dim=input_dim).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
     loader = DataLoader(train, batch_size=batch, shuffle=True)
-    monitor = LearningDynamicsMonitor(pat_train, pat_val)
-    probe = build_probe(train, pat_train)
+    monitor = LearningDynamicsMonitor(pat_train, pat_val, pattern_names=pattern_names)
+    probe = build_probe(train, pat_train, pattern_names=pattern_names)
 
     history = []
     best = {"val": float("inf"), "state": None, "epoch": 0}
@@ -112,7 +120,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
     ae = np.abs(pred - y_test).mean(1)
 
     by_pattern = []
-    for p, name in enumerate(PATTERNS):
+    for p, name in enumerate(pattern_names):
         m = pat_test == p
         if m.sum() == 0:
             continue
@@ -120,7 +128,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
                            "mse": float(se[m].mean()), "mae": float(ae[m].mean())})
 
     examples = {}
-    for p, name in enumerate(PATTERNS):
+    for p, name in enumerate(pattern_names):
         ids = np.where(pat_test == p)[0]
         if len(ids) == 0:
             continue

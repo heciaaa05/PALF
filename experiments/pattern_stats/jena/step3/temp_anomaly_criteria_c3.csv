@@ -1,0 +1,2 @@
+normal_train,normal_val,normal_test,all<=70%,all<=60%
+0.6421673710214165,0.6757251614146671,0.6689794738363689,True,False

@@ -1,0 +1,49 @@
+{
+  "csv": "data/raw/jena_climate_2009_2016.csv",
+  "out": "experiments/pattern_stats/jena/final",
+  "seed": 0,
+  "L": 96,
+  "H": 24,
+  "subsample": 6,
+  "purge": null,
+  "c2_min_share": 0.02,
+  "c2_min_count": 300,
+  "c2_min_runs_train": 20,
+  "c2_min_runs_val": 5,
+  "c2_min_runs_test": 5,
+  "c3_max_normal": 0.7,
+  "c4_max_rel_dev": 0.5,
+  "n_samples_plot": 16,
+  "pattern_scheme": "weather_v1",
+  "pattern_names": [
+    "pressure_drop",
+    "humidity_net_rise",
+    "temp_anomaly",
+    "normal"
+  ],
+  "n_rows": 70092,
+  "n_windows": 69973,
+  "spans": {
+    "train": [
+      0,
+      48981
+    ],
+    "val": [
+      49100,
+      59477
+    ],
+    "test": [
+      59596,
+      69973
+    ]
+  },
+  "train_rows": 49076,
+  "gap": 119,
+  "n_wv_err_fixed": 7,
+  "thresholds_exact": {
+    "pressure_drop": -12.218983957219052,
+    "humidity_net_rise": 20.42802004716981,
+    "temp_heat": 4.740467069892474,
+    "temp_cold": -4.61018682795699
+  }
+}
