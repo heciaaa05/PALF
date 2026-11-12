@@ -1,9 +1,13 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
 .ipynb_checkpoints/
 *.egg-info/
 data/raw/
 experiments/checkpoints/
 experiments/logs/
+experiments/results/baseline/
+*.npy
+baseline_*_jena.zip
 *.pt

@@ -93,6 +93,8 @@ MODEL_REGISTRY = {
     "PatchTST": PatchTSTForecaster,
 }
 
+MODEL_ALIASES = {k.lower(): k for k in MODEL_REGISTRY}
+
 MODEL_INFO = {
     "GRU": "RNN 2 lớp, nhẹ, làm baseline.",
     "TCN": "Conv nhân quả giãn nở (dilated), nhanh và ổn định.",
@@ -101,9 +103,19 @@ MODEL_INFO = {
 }
 
 
+def resolve_model_name(name):
+    if name in MODEL_REGISTRY:
+        return name
+    key = str(name).strip().lower()
+    if key in MODEL_ALIASES:
+        return MODEL_ALIASES[key]
+    raise KeyError(f"Model '{name}' khong hop le. Chon mot trong: {list(MODEL_REGISTRY)}")
+
+
 def build_model(name, input_len=48, horizon=12, input_dim=1, **kwargs):
-    return MODEL_REGISTRY[name](input_len=input_len, horizon=horizon,
-                                input_dim=input_dim, **kwargs)
+    canonical = resolve_model_name(name)
+    return MODEL_REGISTRY[canonical](input_len=input_len, horizon=horizon,
+                                     input_dim=input_dim, **kwargs)
 
 
 def count_params(model):

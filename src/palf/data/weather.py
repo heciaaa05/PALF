@@ -106,11 +106,17 @@ def prepare_weather_data(target_col="T (degC)", L=96, H=24, subsample=6, csv_pat
         th["temp_sign"] = temp_sign
         th["pattern_labels"] = labels_str
         th["fitted_state"] = fitted
+        th["target_col"] = target_col
+        th["target_idx"] = target_idx
+        th["target_mean"] = float(mu[target_idx])
+        th["target_std"] = float(sd[target_idx])
 
         meta = {
             "columns": cols,
             "target_col": target_col,
             "target_idx": target_idx,
+            "target_mean": float(mu[target_idx]),
+            "target_std": float(sd[target_idx]),
             "pattern_scheme": "weather_v1",
             "pattern_names": WEATHER_PATTERNS,
             "pattern_labels": labels_str,
@@ -141,6 +147,11 @@ def prepare_weather_data(target_col="T (degC)", L=96, H=24, subsample=6, csv_pat
     th = compute_thresholds(x[:i1, :, target_idx])
     pat = label_patterns(x[:, :, target_idx], th)
     th["pattern_names"] = PATTERNS
+    th["pattern_scheme"] = "generic"
+    th["target_col"] = target_col
+    th["target_idx"] = target_idx
+    th["target_mean"] = float(mu[target_idx])
+    th["target_std"] = float(sd[target_idx])
 
     def ds_generic(a, b):
         return TensorDataset(
@@ -152,6 +163,8 @@ def prepare_weather_data(target_col="T (degC)", L=96, H=24, subsample=6, csv_pat
         "columns": cols,
         "target_col": target_col,
         "target_idx": target_idx,
+        "target_mean": float(mu[target_idx]),
+        "target_std": float(sd[target_idx]),
         "pattern_scheme": "generic",
         "pattern_names": PATTERNS,
     }

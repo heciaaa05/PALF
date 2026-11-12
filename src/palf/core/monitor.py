@@ -9,11 +9,15 @@ from palf.data.synthetic import PATTERNS
 class LearningDynamicsMonitor:
     """Ghi loss tung sample theo epoch, tong hop theo pattern (kieu Dataset Cartography)."""
 
-    def __init__(self, pat_train, pat_val, pattern_names=None):
+    def __init__(self, pat_train, pat_val, pattern_names=None, sample_index=None):
         self.pat = np.asarray(pat_train)
         self.val_pat = np.asarray(pat_val)
         self.pattern_names = list(pattern_names) if pattern_names is not None else PATTERNS
         self.n = len(self.pat)
+        if sample_index is None:
+            self.sample_index = np.arange(self.n, dtype=np.int64)
+        else:
+            self.sample_index = np.asarray(sample_index, dtype=np.int64)
         self.loss_hist = []
         self.rows = []
         self._cur = np.full(self.n, np.nan, dtype=np.float32)
@@ -42,18 +46,24 @@ class LearningDynamicsMonitor:
                 "grad_norm": grad_norms.get(name, np.nan),
             })
 
-    def save(self, out_dir):
+    def save(self, out_dir, save_sample_losses=True):
         os.makedirs(out_dir, exist_ok=True)
         df = pd.DataFrame(self.rows)
         df.to_csv(os.path.join(out_dir, "epoch_pattern_log.csv"), index=False)
         h = np.stack(self.loss_hist)  # (epochs, n)
+        pattern_labels_train = np.asarray([self.pattern_names[int(p)] for p in self.pat], dtype=str)
         carto = pd.DataFrame({
-            "idx": np.arange(self.n),
-            "pattern": [self.pattern_names[p] for p in self.pat],
+            "idx": self.sample_index,
+            "pattern": pattern_labels_train,
             "mean_loss": h.mean(0),
             "std_loss": h.std(0),
         })
         carto.to_csv(os.path.join(out_dir, "cartography.csv"), index=False)
+        if save_sample_losses:
+            sample_loss_epochs = np.ascontiguousarray(h.T, dtype=np.float32)  # (n_train, epochs)
+            np.save(os.path.join(out_dir, "sample_loss_epochs.npy"), sample_loss_epochs)
+            np.save(os.path.join(out_dir, "sample_index.npy"), self.sample_index.astype(np.int64))
+            np.save(os.path.join(out_dir, "pattern_labels_train.npy"), pattern_labels_train)
         return df
 
 
