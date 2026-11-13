@@ -1,0 +1,10 @@
+model,variable,n_seeds,spearman_rank_mean,spearman_rank_std,spearman_rank_min,kendall_W
+gru,loss_norm,1,,,,
+gru,loss_trend,1,,,,
+gru,learning_velocity,1,,,,
+gru,prediction_stability_ps,1,,,,
+gru,within_pattern_dispersion_dis,1,,,,
+gru,grad_norm,1,,,,
+gru,pattern_frequency,1,,,,
+gru,generalization_gap,1,,,,
+gru,forgetting_risk,1,,,,

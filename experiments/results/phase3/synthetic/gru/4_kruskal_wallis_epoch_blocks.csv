@@ -1,0 +1,10 @@
+sampling_unit,variable,n_obs_total,k_patterns,kruskal_H,p_value,epsilon_sq,eta_sq_H,epsilon_sq_ci95_low,epsilon_sq_ci95_high,median_humidity_net_rise,median_normal,median_pressure_drop,median_temp_anomaly
+epoch_block,loss_norm,4,4,3.0,0.39162517627108895,1.0,,,,0.9999999559112361,0.9999999662419948,0.9999999608527004,0.9999999758885955
+epoch_block,loss_trend,4,4,0.0,1.0,0.0,0.0,,,0.0,0.0,0.0,0.0
+epoch_block,learning_velocity,4,4,0.0,1.0,0.0,0.0,,,0.0,0.0,0.0,0.0
+epoch_block,prediction_stability_ps,4,4,0.0,1.0,0.0,0.0,,,0.0,0.0,0.0,0.0
+epoch_block,within_pattern_dispersion_dis,4,4,3.0,0.39162517627108895,1.0,,,,1.2080155264797237,1.3162585212200586,1.719147737934831,1.7575504474581949
+epoch_block,grad_norm,4,4,3.0,0.39162517627108895,1.0,,,,0.3088952302932739,0.0737345665693283,0.1708846539258957,0.1730941087007522
+epoch_block,pattern_frequency,4,4,3.0,0.39162517627108895,1.0,,,,0.08938159694575448,0.6513341908086809,0.10001837447173394,0.15926583777383066
+epoch_block,generalization_gap,4,4,3.0,0.39162517627108895,1.0,,,,-0.0667994916439057,-0.1314247995615005,-0.10919272899627691,-0.2202339768409729
+epoch_block,forgetting_risk,4,4,0.0,1.0,0.0,0.0,,,0.0,0.0,0.0,0.0

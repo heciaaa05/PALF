@@ -1,0 +1,10 @@
+,loss_norm,loss_trend,learning_velocity,prediction_stability_ps,within_pattern_dispersion_dis,grad_norm,pattern_frequency,generalization_gap,forgetting_risk
+loss_norm,1.0,,,,0.8,-0.4,0.8,-1.0,
+loss_trend,,,,,,,,,
+learning_velocity,,,,,,,,,
+prediction_stability_ps,,,,,,,,,
+within_pattern_dispersion_dis,0.8,,,,1.0,-0.2,0.4,-0.8,
+grad_norm,-0.4,,,,-0.2,1.0,-0.8,0.4,
+pattern_frequency,0.8,,,,0.4,-0.8,1.0,-0.8,
+generalization_gap,-1.0,,,,-0.8,0.4,-0.8,1.0,
+forgetting_risk,,,,,,,,,

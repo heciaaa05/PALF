@@ -1,0 +1,10 @@
+model,variable,n_seeds,spearman_rank_mean,spearman_rank_std,spearman_rank_min,kendall_W
+patchtst,loss_norm,5,1.0,0.0,1.0,1.0
+patchtst,loss_trend,5,-0.22000000000000003,0.45122056690713913,-1.0,0.024
+patchtst,learning_velocity,5,-0.22000000000000003,0.45122056690713913,-1.0,0.024
+patchtst,prediction_stability_ps,5,-0.2,0.4732863826479692,-0.7999999999999999,0.04
+patchtst,within_pattern_dispersion_dis,5,0.76,0.19595917942265426,0.39999999999999997,0.808
+patchtst,grad_norm,5,0.42000000000000004,0.3280243893371345,-0.39999999999999997,0.536
+patchtst,pattern_frequency,5,1.0,0.0,1.0,1.0
+patchtst,generalization_gap,5,0.9199999999999999,0.09797958971132717,0.7999999999999999,0.936
+patchtst,forgetting_risk,5,1.0,0.0,1.0,0.024

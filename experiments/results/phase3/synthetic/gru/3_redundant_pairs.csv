@@ -1,0 +1,11 @@
+var_1,var_2,spearman_rho,abs_rho,is_redundant_gt_0p8
+loss_norm,generalization_gap,-1.0,1.0,True
+loss_norm,within_pattern_dispersion_dis,0.8,0.8,False
+pattern_frequency,generalization_gap,-0.8,0.8,False
+loss_norm,pattern_frequency,0.8,0.8,False
+grad_norm,pattern_frequency,-0.8,0.8,False
+within_pattern_dispersion_dis,generalization_gap,-0.8,0.8,False
+loss_norm,grad_norm,-0.4,0.4,False
+within_pattern_dispersion_dis,pattern_frequency,0.4,0.4,False
+grad_norm,generalization_gap,0.4,0.4,False
+within_pattern_dispersion_dis,grad_norm,-0.2,0.2,False

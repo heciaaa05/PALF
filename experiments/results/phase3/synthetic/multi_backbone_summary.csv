@@ -1,0 +1,3 @@
+target,in_path,mode_effective,n_runs,n_redundant_pairs,out_dir
+gru,D:\Github\PALF\experiments\results\GRU,reduced,1,1,D:\Github\PALF\experiments\results\phase3\synthetic\gru
+transformer,D:\Github\PALF\experiments\results\Transformer,reduced,1,1,D:\Github\PALF\experiments\results\phase3\synthetic\transformer

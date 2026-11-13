@@ -1,0 +1,10 @@
+model,variable,n_seeds,spearman_rank_mean,spearman_rank_std,spearman_rank_min,kendall_W
+transformer,loss_norm,1,,,,
+transformer,loss_trend,1,,,,
+transformer,learning_velocity,1,,,,
+transformer,prediction_stability_ps,1,,,,
+transformer,within_pattern_dispersion_dis,1,,,,
+transformer,grad_norm,1,,,,
+transformer,pattern_frequency,1,,,,
+transformer,generalization_gap,1,,,,
+transformer,forgetting_risk,1,,,,

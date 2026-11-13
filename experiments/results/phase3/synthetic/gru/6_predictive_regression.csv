@@ -1,0 +1,9 @@
+variable,horizon_k,n_obs,r2_baseline_loss_only,r2_with_variable,delta_r2,beta_variable,F_stat,p_value
+loss_trend,3,0,,,,,,
+learning_velocity,3,0,,,,,,
+prediction_stability_ps,3,0,,,,,,
+within_pattern_dispersion_dis,3,0,,,,,,
+grad_norm,3,0,,,,,,
+pattern_frequency,3,0,,,,,,
+generalization_gap,3,0,,,,,,
+forgetting_risk,3,0,,,,,,

@@ -1,0 +1,5 @@
+target,in_path,mode_effective,n_runs,n_redundant_pairs,out_dir
+gru,D:\Github\PALF\experiments\results\baseline\jena\gru,full,5,5,D:\Github\PALF\experiments\results\phase3\jena_all\gru
+tcn,D:\Github\PALF\experiments\results\baseline\jena\tcn,full,5,5,D:\Github\PALF\experiments\results\phase3\jena_all\tcn
+transformer,D:\Github\PALF\experiments\results\baseline\jena\transformer,full,5,2,D:\Github\PALF\experiments\results\phase3\jena_all\transformer
+patchtst,D:\Github\PALF\experiments\results\baseline\jena\patchtst,full,5,5,D:\Github\PALF\experiments\results\phase3\jena_all\patchtst

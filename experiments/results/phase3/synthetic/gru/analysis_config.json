@@ -1,0 +1,19 @@
+{
+  "in_path": "D:\\Github\\PALF\\experiments\\results\\GRU",
+  "out_dir": "D:\\Github\\PALF\\experiments\\results\\phase3\\synthetic\\gru",
+  "mode_requested": "auto",
+  "mode_effective": "reduced",
+  "n_run_dirs": 1,
+  "run_dirs": [
+    "D:\\Github\\PALF\\experiments\\results\\GRU"
+  ],
+  "run_modes": {
+    "D:\\Github\\PALF\\experiments\\results\\GRU": "reduced"
+  },
+  "normalization": "epoch1",
+  "W": 5,
+  "k": 3,
+  "n_boot": 200,
+  "n_perm": 100,
+  "seed": 42
+}

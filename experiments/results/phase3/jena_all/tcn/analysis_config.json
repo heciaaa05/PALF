@@ -1,0 +1,27 @@
+{
+  "in_path": "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn",
+  "out_dir": "D:\\Github\\PALF\\experiments\\results\\phase3\\jena_all\\tcn",
+  "mode_requested": "auto",
+  "mode_effective": "full",
+  "n_run_dirs": 5,
+  "run_dirs": [
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed0",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed1",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed2",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed3",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed4"
+  ],
+  "run_modes": {
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed0": "full",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed1": "full",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed2": "full",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed3": "full",
+    "D:\\Github\\PALF\\experiments\\results\\baseline\\jena\\tcn\\seed4": "full"
+  },
+  "normalization": "epoch1",
+  "W": 5,
+  "k": 3,
+  "n_boot": 200,
+  "n_perm": 100,
+  "seed": 42
+}
