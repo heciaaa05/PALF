@@ -234,3 +234,45 @@ def test_predictive_policy_a_sign_flip_c_validation_d_differs_from_loss(tmp_path
         json.dump(bad_missing_feat, f)
     with pytest.raises(ValueError, match="instability"):
         PolicyEngine(PATTERNS, FREQS, PalfConfig(policy="predictive", predictive_coef_path=p_bad2))
+
+
+def test_loss_abs_policy_and_warmup1_tracker():
+    """(Prompt 8.4 E1 & E2):
+    - E1: Tracker tinh duoc instability tu epoch 2 tro di khi warmup_epochs=1;
+    - E2: policy='loss_abs' trao trong so cao hon cho Pattern co loss tuyet doi cao hon (du loss_ratio thap hon),
+      va van khong doc val/test."""
+    cfg_e2 = PalfConfig(policy="loss_abs", warmup_epochs=1, alpha=0.5, w_min=0.25, w_max=2.0, ema_beta=0.0)
+    tracker = LearningStateTracker(PATTERNS, cfg_e2)
+
+    # Epoch 1: temp_anomaly co loss khoi dau rat cao (2.0), normal thap (0.5)
+    st1 = tracker.update(1, {
+        "pressure_drop": {"loss_mean": 1.0, "loss_std": 0.1, "n_seen": 100, "grad_norm": 0.5},
+        "humidity_net_rise": {"loss_mean": 0.8, "loss_std": 0.1, "n_seen": 100, "grad_norm": 0.5},
+        "temp_anomaly": {"loss_mean": 2.0, "loss_std": 0.2, "n_seen": 100, "grad_norm": 0.5},
+        "normal": {"loss_mean": 0.5, "loss_std": 0.05, "n_seen": 700, "grad_norm": 0.5},
+    })
+    # Epoch 2: temp_anomaly giam con 0.8 (loss_ratio = 0.40 thap nhat, nhung loss tuyet doi 0.80 cao nhat!)
+    # normal giam con 0.45 (loss_ratio = 0.90 cao nhat, nhung loss tuyet doi 0.45 thap nhat!)
+    st2 = tracker.update(2, {
+        "pressure_drop": {"loss_mean": 0.60, "loss_std": 0.1, "n_seen": 100, "grad_norm": 0.4},
+        "humidity_net_rise": {"loss_mean": 0.55, "loss_std": 0.1, "n_seen": 100, "grad_norm": 0.4},
+        "temp_anomaly": {"loss_mean": 0.80, "loss_std": 0.2, "n_seen": 100, "grad_norm": 0.4},
+        "normal": {"loss_mean": 0.45, "loss_std": 0.05, "n_seen": 700, "grad_norm": 0.4},
+    })
+
+    # E1 check: instability o epoch 2 phai la so huu han (khong phai NaN) cho moi pattern
+    for p in PATTERNS:
+        assert np.isfinite(st2[p]["instability"]), f"instability cua {p} o epoch 2 phai huu han"
+        assert np.isfinite(st2[p]["loss_abs"]), f"loss_abs cua {p} o epoch 2 phai huu han"
+
+    # E2 check: temp_anomaly co loss tuyet doi cao nhat (0.80) -> nhan trong so cao nhat
+    eng_clean = PolicyEngine(PATTERNS, FREQS, cfg_e2)
+    d2_clean = eng_clean.decide(2, st2)
+    assert d2_clean.weights["temp_anomaly"] > d2_clean.weights["pressure_drop"] > d2_clean.weights["humidity_net_rise"] > d2_clean.weights["normal"]
+
+    # Kiem tra Policy loss_abs khong doc val/test
+    st2_with_val = {p: dict(st2[p], val_loss=999.0 if p == "normal" else 0.001, test_mae=888.0) for p in PATTERNS}
+    eng_val = PolicyEngine(PATTERNS, FREQS, cfg_e2)
+    d2_val = eng_val.decide(2, st2_with_val)
+    assert d2_clean.weights == d2_val.weights
+    assert d2_clean.info["need_score"] == d2_val.info["need_score"]

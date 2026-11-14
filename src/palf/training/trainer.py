@@ -191,7 +191,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
                     "hit_floor": bool(current_decision.info["hit_floor"].get(p_name, False)),
                     "hit_ceil": bool(current_decision.info["hit_ceil"].get(p_name, False)),
                 }
-                for sv in cfg.state_vars:
+                for sv in dict.fromkeys(list(cfg.state_vars) + ["loss_abs"]):
                     p_row[sv] = float(state_dict.get(p_name, {}).get(sv, np.nan))
                 for zv, zval in current_decision.info["z_scores"].get(p_name, {}).items():
                     p_row[f"z_{zv}"] = float(zval)

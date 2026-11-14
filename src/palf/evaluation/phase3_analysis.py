@@ -1313,15 +1313,17 @@ def run_g3_followup_analysis(
     df_c = pd.DataFrame(rows_c)
     df_c.to_csv(os.path.join(out_dir, "g3_check_c_mean_reversion.csv"), index=False)
 
-    # Phan 4.2: Xuat 3 ban predictive_coef*.json + ban mac dinh predictive_coef.json
+    # Phan 4.2 & Prompt 8.4: Xuat 4 ban predictive_coef*.json + ban mac dinh predictive_coef.json
     coef_pooled = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="pooled", fit_seeds=(0, 1, 2, 3, 4), controls_epoch=True)
     coef_gru = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(0, 1, 2, 3, 4), controls_epoch=True)
     coef_gru34 = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(3, 4), controls_epoch=True)
+    coef_gru012 = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(0, 1, 2), controls_epoch=True)
 
     for fname, cdict in [
         ("predictive_coef_pooled.json", coef_pooled),
         ("predictive_coef_gru.json", coef_gru),
         ("predictive_coef_gru_seeds34.json", coef_gru34),
+        ("predictive_coef_gru_seeds012.json", coef_gru012),
         ("predictive_coef.json", coef_gru34),
     ]:
         with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as f:
@@ -1340,13 +1342,13 @@ def run_g3_followup_analysis(
     )
 
     md_lines = [
-        "# Báo cáo G3 Follow-up: Kiểm soát Epoch, Lọc Nhiễu & Kiểm định Mean-Reversion (Prompt 7 — Phần 4)",
+        "# Báo cáo G3 Follow-up: Kiểm soát Epoch, Lọc Nhiễu & Kiểm định Mean-Reversion (Prompt 7 — Phần 4 & Prompt 8)",
         "",
         "## 1. Kết luận theo ngưỡng đặt trước (Pre-registered Decision Rule)",
         "",
         "- **Ngưỡng đặt trước (Prompt 7 Phần 4.3):** *Learning State được giữ nếu $\\Delta R^2$ sau kiểm soát epoch $\\ge 0.02$ ở ít nhất 3/4 backbone và dấu $\\beta$ cùng chiều ở cả 4. Nếu không, báo \"lui về phương án dự phòng\".*",
-        f"- **Kết quả của `instability` (`prediction_stability_ps`):** Số backbone có $\\Delta R^2 \\ge 0.02$ sau kiểm soát epoch = **{n_pass_dr2}/4** | Dấu $\\beta$ cùng chiều ở cả 4 backbone = **{same_sign}**.",
-        f"- **Quyết định chính thức:** **{verdict_str}**.",
+        f"- **Kết quả của `instability` (`prediction_stability_ps`):** Số backbone có $\\Delta R^2 \\ge 0.02$ sau kiểm soát epoch = **{n_pass_dr2}/4** | Dấu $\\beta$ cùng chiều ở cả 4 backbone = **{same_sign}** (dấu $\\beta$ của `instability` đổi từ $+$ sang $-$ sau khi kiểm soát epoch ở GRU, TCN nhưng mang dấu $+$ ngược lại ở PatchTST, tức không nhất quán giữa các kiến trúc).",
+        f"- **Quyết định chính thức:** **{verdict_str}** (mọi thực nghiệm dùng `predictive` phải ghi rõ nhãn **`predictive (không đạt ngưỡng G3)`**).",
         "",
         "## 2. Kiểm tra (a) — Trước và Sau khi Kiểm soát Hiệu ứng Cố định theo Epoch (`controls_epoch`)",
         "",
@@ -1356,9 +1358,11 @@ def run_g3_followup_analysis(
         "",
         "### 3.1. Trên đường cong loss đã làm mượt (có kiểm soát epoch)",
         "",
+        "> **Cảnh báo phương pháp luận (Phát hiện 7, Prompt 8):** Các con số $\\Delta R^2 = 0.23\\text{–}0.43$ khi tính trên chuỗi làm mượt (`ma3`, `ema`) là **hiệu ứng cơ học** (*mechanical artifact*) do đặc trưng tại epoch $e$ và mục tiêu tại $e+k$ cùng được tính trên các cửa sổ làm mượt chồng lấn nhau. **Tuyệt đối không trích dẫn các con số `ma3`/`ema` này làm bằng chứng thực nghiệm.** Chỉ sử dụng kết quả trên chuỗi `raw` (Mục 2 và Mục 3.2).",
+        "",
         _df_to_markdown(df_b_smooth[df_b_smooth["scope"].isin(["gru", "pooled"])]),
         "",
-        "### 3.2. $R^2$ ngoài mẫu chéo giữa các Seed (`Seed 0-2 -> 3-4` và `Seed 3-4 -> 0-2`)",
+        "### 3.2. $R^2$ ngoài mẫu chéo giữa các Seed (`Seed 0-2 -> 3-4` và `Seed 3-4 -> 0-2`, trên chuỗi `raw`)",
         "",
         _df_to_markdown(df_b_oos),
         "",
@@ -1366,10 +1370,16 @@ def run_g3_followup_analysis(
         "",
         _df_to_markdown(df_c),
         "",
-        "## 5. Hệ số xuất ra trong `predictive_coef.json` (Bản GRU học trên Seed 3–4, dùng cho Seed 0–2)",
+        "## 5. Hệ số xuất ra trong `predictive_coef_gru_seeds34.json` (Học trên Seed 3–4, dùng cho Seed 0–2) và `predictive_coef_gru_seeds012.json` (Học trên Seed 0–2, dùng cho Seed 3–4)",
         "",
+        "### 5.1. `predictive_coef_gru_seeds34.json` (`fit_seeds: [3, 4]`)",
         "```json",
         json.dumps(coef_gru34, indent=2),
+        "```",
+        "",
+        "### 5.2. `predictive_coef_gru_seeds012.json` (`fit_seeds: [0, 1, 2]`)",
+        "```json",
+        json.dumps(coef_gru012, indent=2),
         "```",
     ]
     g3_path = os.path.join(out_dir, "g3_followup.md")
@@ -1384,6 +1394,7 @@ def run_g3_followup_analysis(
         "coef_pooled": coef_pooled,
         "coef_gru": coef_gru,
         "coef_gru34": coef_gru34,
+        "coef_gru012": coef_gru012,
         "keep_learning_state": keep_learning_state,
         "verdict": verdict_str,
         "report_path": g3_path,

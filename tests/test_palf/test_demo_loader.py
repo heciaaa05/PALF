@@ -105,17 +105,16 @@ def test_demo_loader_discover_and_summarize(tmp_path):
     assert len(overall_df) == 2
     assert len(pat_df) == 8
 
-    # Kiem tra so mau va thoi gian toi nguong val_target = 0.51:
-    # Baseline dat <= 0.51 o epoch 3 (300 mau, 6.0s); PALF dat <= 0.51 o epoch 2 (140 mau, 4.0s)
+    # Kiem tra so mau toi nguong val_target = 0.51 (cot Giay toi nguong da duoc loai bo khoi bang chinh theo Prompt 8):
+    # Baseline dat <= 0.51 o epoch 3 (300 mau); PALF dat <= 0.51 o epoch 2 (140 mau)
     b_row = overall_df[overall_df["Mode"] == "baseline"].iloc[0]
     p_row = overall_df[overall_df["Mode"] == "palf"].iloc[0]
     assert b_row["Epoch tới ngưỡng"] == 3
     assert b_row["Số mẫu tới ngưỡng"] == pytest.approx(300.0)
-    assert b_row["Giây tới ngưỡng"] == pytest.approx(6.0)
+    assert "Giây tới ngưỡng" not in overall_df.columns
 
     assert p_row["Epoch tới ngưỡng"] == 2
     assert p_row["Số mẫu tới ngưỡng"] == pytest.approx(140.0)
-    assert p_row["Giây tới ngưỡng"] == pytest.approx(4.0)
 
 
 def test_demo_loader_palf_diagnostics_and_missing_palf(tmp_path):

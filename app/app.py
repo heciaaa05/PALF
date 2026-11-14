@@ -220,13 +220,13 @@ if page.startswith("1."):
             )
             overall_df, pat_df, _ = summarize_side_by_side(chosen_runs, val_target=custom_target)
 
-            st.markdown("#### Bảng tổng hợp: Test MAE/RMSE (°C) & Tốc độ đạt ngưỡng Val")
+            st.markdown("#### Bảng tổng hợp: Test MAE/RMSE (°C) & Tốc độ đạt ngưỡng Val (theo Epoch / Số mẫu)")
             st.dataframe(overall_df, hide_index=True, use_container_width=True)
 
-            c_plot0, c_plot1, c_plot2 = st.columns(3)
+            c_plot0, c_plot1 = st.columns(2)
             with c_plot0:
                 st.markdown("#### 1. Đường `val_loss` theo **Epoch**")
-                fig0, ax0 = plt.subplots(figsize=(5.5, 3.8))
+                fig0, ax0 = plt.subplots(figsize=(6.5, 4.0))
                 for r in chosen_runs:
                     h = r["history"]
                     ax0.plot(h["epoch"], h["val_loss"], marker="o", markersize=3, label=r["label"])
@@ -241,7 +241,7 @@ if page.startswith("1."):
 
             with c_plot1:
                 st.markdown("#### 2. Đường `val_loss` theo **Số mẫu tích lũy**")
-                fig1, ax1 = plt.subplots(figsize=(5.5, 3.8))
+                fig1, ax1 = plt.subplots(figsize=(6.5, 4.0))
                 for r in chosen_runs:
                     h = r["history"]
                     ax1.plot(h["cum_samples"], h["val_loss"], marker="o", markersize=3, label=r["label"])
@@ -253,21 +253,6 @@ if page.startswith("1."):
                 plt.tight_layout()
                 st.pyplot(fig1)
                 plt.close(fig1)
-
-            with c_plot2:
-                st.markdown("#### 3. Đường `val_loss` theo **Thời gian tích lũy (s)**")
-                fig2, ax2 = plt.subplots(figsize=(5.5, 3.8))
-                for r in chosen_runs:
-                    h = r["history"]
-                    ax2.plot(h["cum_time_sec"], h["val_loss"], marker="s", markersize=3, label=r["label"])
-                ax2.axhline(custom_target, color="red", linestyle="--", linewidth=1, label=f"val_target={custom_target:.4f}")
-                ax2.set_xlabel("Thời gian huấn luyện tích lũy (giây)")
-                ax2.set_ylabel("Validation MSE (chuẩn hóa)")
-                ax2.grid(True, alpha=0.3)
-                ax2.legend(fontsize=7)
-                plt.tight_layout()
-                st.pyplot(fig2)
-                plt.close(fig2)
 
             st.markdown("#### Bảng MAE và RMSE (°C) trên tập Test theo từng Pattern (của các lần chạy đang chọn)")
             if not pat_df.empty:
@@ -314,12 +299,68 @@ elif page.startswith("2."):
         else:
             rc = sel_run.get("run_config", {})
             p_cfg = rc.get("palf_config", {}) or {}
+            tm = sel_run.get("test_metrics", {})
+            hist = sel_run["history"]
+            pol_raw = str(p_cfg.get("policy", "-"))
+            pol_disp = f"{pol_raw.upper()} (không đạt G3)" if pol_raw == "predictive" else pol_raw.upper()
+            warmup_ep = int(p_cfg.get("warmup_epochs", 3))
+            best_ep = int(tm.get("best_epoch", hist.loc[hist["val_loss"].idxmin(), "epoch"]))
+
             m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("Chính sách (Policy)", str(p_cfg.get("policy", "-")).upper())
+            m1.metric("Chính sách (Policy)", pol_disp)
             m2.metric("Budget Ratio (ρ)", f"{p_cfg.get('budget_ratio', 1.0):g}")
             m3.metric("Hệ số α", f"{p_cfg.get('alpha', 1.0):g}")
             m4.metric("Khoảng [w_min, w_max]", f"[{p_cfg.get('w_min', 0.25):g}, {p_cfg.get('w_max', 3.0):g}]")
-            m5.metric("Warm-up / Window", f"{p_cfg.get('warmup_epochs', 3)} / {p_cfg.get('window', 3)}")
+            m5.metric("Warm-up / Best Epoch", f"ep {warmup_ep} / ep {best_ep}")
+
+            st.markdown(
+                "#### 0. Tương quan giữa Trọng số `weights[p]`, Đường `val_loss`, mốc hết `warmup_epochs` và `best_epoch`"
+            )
+            st.caption(
+                "Biểu đồ giúp quan sát trực tiếp hệ quả khi `best_epoch` rơi sát thời điểm kết thúc `warmup_epochs`: "
+                "cơ chế điều chỉnh trọng số chỉ có rất ít epoch tác động trước khi mô hình đạt đỉnh trên tập validation."
+            )
+            fig_wv, ax_w = plt.subplots(figsize=(10.5, 4.0))
+            w_piv = diag["weights_pivot"]
+            for pat_col in w_piv.columns:
+                ax_w.plot(w_piv.index, w_piv[pat_col], marker="o", markersize=3.5, linewidth=1.8, label=f"w[{pat_col}]")
+            ax_w.axvline(
+                warmup_ep,
+                color="#d97706",
+                linestyle="--",
+                linewidth=1.6,
+                label=f"Hết warm-up (epoch {warmup_ep})",
+            )
+            ax_w.axvline(
+                best_ep,
+                color="#dc2626",
+                linestyle=":",
+                linewidth=1.8,
+                label=f"Best val_loss (epoch {best_ep})",
+            )
+            ax_w.set_xlabel("Epoch")
+            ax_w.set_ylabel("Trọng số lấy mẫu weights[p]")
+            ax_w.grid(True, alpha=0.25)
+
+            ax_v = ax_w.twinx()
+            ax_v.plot(
+                hist["epoch"],
+                hist["val_loss"],
+                color="#111827",
+                linestyle="-.",
+                marker="s",
+                markersize=3.5,
+                linewidth=2.0,
+                label="val_loss (MSE chuẩn hóa)",
+            )
+            ax_v.set_ylabel("Validation MSE (chuẩn hóa)")
+
+            lines_w, labels_w = ax_w.get_legend_handles_labels()
+            lines_v, labels_v = ax_v.get_legend_handles_labels()
+            ax_w.legend(lines_w + lines_v, labels_w + labels_v, loc="upper right", fontsize=8, ncol=2)
+            plt.tight_layout()
+            st.pyplot(fig_wv)
+            plt.close(fig_wv)
 
             col_w, col_q, col_s = st.columns(3)
             with col_w:
@@ -380,7 +421,11 @@ else:
         window = 3
 
         if train_mode == "palf":
-            policy_name = st.selectbox("Chính sách (Policy)", ["predictive", "loss", "uniform", "state"], index=0)
+            policy_name = st.selectbox(
+                "Chính sách (Policy)",
+                ["predictive", "loss_abs", "loss", "uniform", "state"],
+                index=0,
+            )
             budget_ratio = st.slider("Ngân sách mẫu mỗi epoch (budget_ratio)", 0.3, 1.0, 0.7, 0.05)
             alpha = st.slider("Độ mạnh phản ứng (alpha)", 0.25, 3.0, 1.0, 0.25)
             with st.expander("Tham số PALF nâng cao"):

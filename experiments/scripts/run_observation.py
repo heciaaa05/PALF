@@ -57,8 +57,8 @@ def parse_args(argv=None):
     # Cac co PALF (Phase 5-6 v1)
     parser.add_argument(
         "--policy", type=str, default="predictive",
-        choices=["uniform", "loss", "state", "predictive"],
-        help="Chinh sach PALF: uniform, loss, state, predictive (mac dinh: predictive)."
+        choices=["uniform", "loss", "loss_abs", "state", "predictive"],
+        help="Chinh sach PALF: uniform, loss, loss_abs, state, predictive (mac dinh: predictive)."
     )
     parser.add_argument(
         "--predictive-coef", dest="predictive_coef_path", type=str,

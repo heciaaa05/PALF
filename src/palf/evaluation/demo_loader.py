@@ -93,18 +93,25 @@ def load_saved_run(run_dir: str, label: Optional[str] = None) -> dict:
     config_tag = run_config.get("config_tag", "baseline" if mode == "baseline" else "palf")
     model = str(run_config.get("model", "unknown")).lower()
     seed = int(run_config.get("seed", 0))
+    p_cfg = run_config.get("palf_config", {}) or {}
+    pol_name = p_cfg.get("policy", "")
+
+    display_tag = config_tag
+    if pol_name == "predictive" or "predictive" in str(config_tag) or str(config_tag).startswith("e1_warmup1"):
+        display_tag = f"{config_tag} [predictive - không đạt ngưỡng G3]"
 
     if label is None:
         if mode == "baseline":
             label = f"Baseline (A0) | {model.upper()} | seed{seed}"
         else:
-            label = f"PALF ({config_tag}) | {model.upper()} | seed{seed}"
+            label = f"PALF ({display_tag}) | {model.upper()} | seed{seed}"
 
     return {
         "label": label,
         "run_dir": run_dir,
         "mode": mode,
         "config_tag": config_tag,
+        "display_tag": display_tag,
         "model": model,
         "seed": seed,
         "has_palf": has_palf,
@@ -193,7 +200,7 @@ def summarize_side_by_side(
         overall_rows.append({
             "Run": r["label"],
             "Mode": r["mode"],
-            "Config": r["config_tag"],
+            "Config": r.get("display_tag", r["config_tag"]),
             "Model": r["model"].upper(),
             "Seed": int(r["seed"]),
             "Test MAE (°C)": float(tm.get("mae_degC", np.nan)),
@@ -202,11 +209,8 @@ def summarize_side_by_side(
             "Best Epoch": int(tm.get("best_epoch", hist.loc[hist["val_loss"].idxmin(), "epoch"])),
             "Epoch tới ngưỡng": ttt["epoch_to_target"],
             "Số mẫu tới ngưỡng": ttt["samples_to_target"],
-            "Giây tới ngưỡng": ttt["time_sec_to_target"],
             "AUC Val (theo mẫu)": auc_s,
             "Tổng mẫu đã duyệt": tot_samples,
-            "Tổng thời gian (s)": tot_time,
-            "Overhead PALF (s)": tot_ov,
         })
 
         for bp in tm.get("by_pattern", []):

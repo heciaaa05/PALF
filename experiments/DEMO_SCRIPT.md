@@ -1,64 +1,75 @@
 # Kịch bản Trình diễn (Demo Script) PALF — 5 đến 7 phút
 
-Tài liệu này hướng dẫn trình tự thao tác và lời thuyết minh (5–7 phút) trên giao diện Streamlit (`streamlit run app/app.py`), sử dụng **kết quả thực nghiệm thật 30 epoch** đã lưu sẵn trên đĩa để không phụ thuộc thời gian chờ huấn luyện trực tiếp.
+Tài liệu này hướng dẫn trình tự thao tác và lời thuyết minh (5–7 phút) trên giao diện Streamlit (`streamlit run app/app.py`), sử dụng **kết quả thực nghiệm đã lưu sẵn trên đĩa** để không phụ thuộc thời gian chờ huấn luyện trực tiếp.
 
 ---
 
 ## 1. Mở đầu: Bài toán & Động lực (1 phút)
 
-- **Bài toán thực tế:** Dự báo nhiệt độ chuỗi thời gian trên tập dữ liệu khí tượng **Jena Climate** (`48,981` mẫu train, `10,492` mẫu val, `10,493` mẫu test). Dữ liệu không đồng nhất: phần lớn thời gian là trạng thái thời tiết bình thường (`normal`, ~80% dữ liệu), xen kẽ các **sự kiện khí tượng hiếm** nhưng quan trọng như tụt áp suất đột ngột (`pressure_drop`), độ ẩm tăng mạnh (`humidity_net_rise`) hoặc dị thường nhiệt độ (`temp_anomaly`).
-- **Hạn chế của huấn luyện tiêu chuẩn (Uniform Sampling):** Mỗi epoch, DataLoader lấy mẫu đồng đều trên toàn bộ tập train. Do mẫu `normal` áp đảo về số lượng, gradient bị chi phối bởi trạng thái bình thường; mô hình hoặc học chậm trên các sự kiện hiếm, hoặc lãng phí ngân sách tính toán lặp đi lặp lại các mẫu dễ đã hội tụ.
-- **Câu hỏi của PALF (Pattern-Aware Learning Framework):** Liệu việc theo dõi trạng thái học theo từng nhóm pattern sau mỗi epoch và điều chỉnh lịch trình lấy mẫu (`AdaptiveScheduler` v1 — cho phép lặp mẫu có hoàn lại cho nhóm khó và giảm lấy mẫu nhóm dễ) có giúp mô hình **hội tụ nhanh hơn theo số mẫu xử lý** hoặc **cải thiện sai số trên các pattern sự kiện hiếm** hay không?
+- **Bài toán thực tế:** Dự báo nhiệt độ chuỗi thời gian trên tập dữ liệu khí tượng **Jena Climate** (`48,981` mẫu train, `10,377` mẫu val, `10,377` mẫu test, có khoảng đệm `purge_gap = 119` bước giữa các tập).
+- **Cơ cấu 4 nhóm Pattern theo quy tắc ngưỡng phân vị trên chuỗi đầu vào $X$ (`pattern_labels_test`):**
+  - `normal`: **66,9%** (`6,942 / 10,377` mẫu test)
+  - `temp_anomaly`: **16,7%** (`1,730 / 10,377` mẫu test; gồm `1,511` mẫu dị thường nóng `heat` và `219` mẫu dị thường lạnh `cold`)
+  - `pressure_drop`: **9,0%** (`929 / 10,377` mẫu test)
+  - `humidity_net_rise`: **7,5%** (`776 / 10,377` mẫu test)
+- **Câu hỏi nghiên cứu của PALF (Pattern-Aware Learning Framework):** Khi huấn luyện đồng đều (*uniform sampling*), nhóm `normal` chiếm hai phần ba số mẫu trong mỗi epoch, trong khi nhóm có sai số tuyệt đối lớn nhất là `temp_anomaly` (`MAE ≈ 1.98 °C`, cao hơn `normal` khoảng `+0.23 °C`). Liệu việc theo dõi trạng thái học theo từng Pattern sau mỗi epoch và điều chỉnh lịch trình lấy mẫu (`AdaptiveScheduler` v1) có thay đổi tốc độ hội tụ theo số mẫu hoặc cải thiện sai số trên các Pattern khó vượt ra ngoài biến động ngẫu nhiên giữa các seed hay không?
 
 ---
 
-## 2. Thao tác 1 — So sánh cạnh nhau từ kết quả 30 epoch đã lưu (1.5 phút)
+## 2. Thao tác 1 — So sánh cạnh nhau từ kết quả đã lưu (1.5 phút)
 
-1. Mở giao diện `streamlit run app/app.py`. Mặc định ứng dụng vào **Trang 1: `1. So sánh cạnh nhau (Ngoại tuyến - Kết quả chạy sẵn 30 epoch)`**.
-2. Ở bộ lọc bên trái:
-   - Chọn **Lọc theo Backbone:** `GRU`.
-   - Chọn **Lọc theo Seed:** `0` (hoặc `Tất cả` để chọn nhiều cấu hình trên cùng seed).
-3. Ở ô chọn lần chạy, đặt cạnh nhau 3 cấu hình tiêu chuẩn trên cùng `seed 0`:
-   - `Baseline | GRU | seed 0` (`A0`: lấy mẫu đều, `budget_ratio = 1.0`).
-   - `PALF (predictive_b1.0...) | GRU | seed 0` (`A3`: chính sách hồi quy tuyến tính từ Learning State, `budget_ratio = 1.0`).
-   - `PALF (predictive_b0.7...) | GRU | seed 0` (`A3r`: chính sách `predictive` với ngân sách giảm còn `70%` số mẫu mỗi epoch).
-4. **Chỉ vào 3 biểu đồ đường `val_loss`:**
-   - **Biểu đồ 1 (`val_loss` theo Epoch):** Cho thấy quỹ đạo hội tụ qua 30 epoch và đường ngưỡng mục tiêu màu đỏ `val_target = 1.02 × best_val_loss(A0)`.
-   - **Biểu đồ 2 (`val_loss` theo Số mẫu tích lũy):** Nhấn mạnh rằng với `budget_ratio = 0.7` (`A3r` và `A0r`), mỗi epoch chỉ xử lý `34,287` mẫu thay vì `48,981` mẫu, nên đường biểu diễn dịch sang trái — giúp kiểm chứng trực tiếp **tốc độ đạt ngưỡng `val_target` tính theo số mẫu (`samples_to_target`) và diện tích dưới đường cong (`val_auc_samples`)**.
-   - **Biểu đồ 3 (`val_loss` theo Thời gian tích lũy):** Cho thấy chi phí thời gian thực tế có tính cả `overhead_sec` của bước cập nhật `Monitor + Tracker + Policy` cuối mỗi epoch (chỉ chiếm `< 0.1%` thời gian mỗi epoch).
+1. Mở giao diện `streamlit run app/app.py`. Mặc định ứng dụng vào **Trang 1: `1. So sánh cạnh nhau (Ngoại tuyến - Kết quả chạy sẵn)`**.
+2. Ở bộ lọc bên trái: chọn **Backbone = `GRU`**, **Seed = `0`** (hoặc `Tất cả`).
+3. Đặt cạnh nhau các cấu hình tiêu chuẩn:
+   - `A0` (`baseline`: lấy mẫu đều, `budget_ratio = 1.0`).
+   - `A0r` (`uniform_b0.7`: lấy mẫu đều qua Scheduler, giảm 30% mẫu mỗi epoch, `budget_ratio = 0.7`).
+   - `A1` (`loss_b1.0_a1.0`: chỉ dùng `loss_ratio`, `budget_ratio = 1.0`).
+   - `A3` (`predictive_b1.0_a0.5_w2`: **chính sách `predictive` (không đạt ngưỡng G3)**, `budget_ratio = 1.0`).
+   - `A3r` (`predictive_b0.7_a0.5_w2`: **chính sách `predictive` (không đạt ngưỡng G3)**, `budget_ratio = 0.7`).
+4. **Chỉ vào đường `val_loss` theo Epoch và theo Số mẫu tích lũy:**
+   - Giải thích rõ: trên GRU, điểm `val_loss` tốt nhất đạt rất sớm ở **epoch 4–6**, sau đó mô hình bắt đầu overfit (`val_loss` tăng từ `~0.080` lên `~0.132` ở epoch 30).
+   - Vì tập test được đánh giá tại checkpoint có `val_loss` tốt nhất (`best_epoch`), phép đo hiện tại thực chất phản ánh **1–3 epoch tác động của Policy** ngay sau khi kết thúc giai đoạn khởi động (`warmup_epochs = 3`).
+   - *(Lưu ý kỹ thuật: không dùng thời gian chạy `time_sec_to_target` hay `overhead` để so sánh giữa các cấu hình vì thời gian phụ thuộc tải CPU và đường mã lấy mẫu).*
 
 ---
 
-## 3. Thao tác 2 — Quan sát cơ chế Trọng số & Tỷ lệ mẫu theo Epoch (1.5 phút)
+## 3. Thao tác 2 — Quan sát Trọng số Pattern kèm Đường `val_loss` và Vạch `best_epoch` (1.5 phút)
 
 1. Chuyển sang **Trang 2: `2. Quan sát PALF (Trọng số, Tỷ lệ mẫu & Learning State)`**.
-2. Chọn lần chạy `PALF (predictive_b1.0...) | GRU | seed 0` (hoặc `loss_b1.0_a1.0`).
-3. **Chỉ vào 3 biểu đồ hàng trên:**
-   - **Biểu đồ 1 (`weights[p]` theo Epoch):** Trong 3 epoch đầu (`warmup_epochs = 3`), toàn bộ 4 pattern đều giữ trọng số `1.0` để khởi tạo đầy đủ bộ nhớ động học `LearningStateTracker`. Từ **epoch 4 trở đi**, chính sách bắt đầu phân hóa trọng số: các pattern có dự báo tốc độ giảm loss chậm / độ bất ổn cao (như `pressure_drop`, `temp_anomaly`) được đẩy trọng số lên `> 1.0`, trong khi pattern dễ hơn bị giảm trọng số `< 1.0`.
-   - **Biểu đồ 2 (`quota_planned` share theo Epoch):** Minh họa bản sửa lỗi cốt lõi của `AdaptiveScheduler` v1 — ở `budget_ratio = 1.0`, tỷ lệ mẫu dự kiến của từng pattern thực sự thay đổi theo `weights[p]` (các pattern có `n_p > N_p` được lấy toàn bộ `N_p` mẫu gốc cộng với `n_p - N_p` mẫu lặp có hoàn lại).
-   - **Biểu đồ 3 (`n_seen` share theo Epoch):** Cho thấy tỷ lệ mẫu **duy nhất** được duyệt trong mỗi pattern.
-4. **Chỉ vào hàng biểu đồ Learning State phía dưới:** Giải thích ngắn gọn cách `loss_ratio` và `instability` biến thiên theo epoch và tạo ra điểm ưu tiên `need_score`.
+2. Chọn một lần chạy PALF (ví dụ `A3` hoặc `A1` trên `GRU, seed 0`).
+3. **Chỉ vào biểu đồ kết hợp `Trọng số Pattern & Đường val_loss` (có vạch đứng kết thúc warm-up và vạch `best_epoch`):**
+   - Trong 3 epoch đầu (`warmup_epochs = 3`, bên trái vạch xanh), mọi Pattern có trọng số `1.0`.
+   - Từ epoch 4 (ngay sau vạch warm-up), Policy bắt đầu phân hóa trọng số `weights[p]` và thay đổi tỷ lệ mẫu `quota_planned` (cho phép lặp mẫu có hoàn lại khi $n_p > N_p$). Tuy nhiên, vạch đỏ `best_epoch` xuất hiện ngay ở epoch 5–6, cho thấy khoảng thời gian để Policy phát huy tác dụng trước khi GRU overfit là rất ngắn (1–2 epoch).
+   - Chỉ ra hiện tượng quan trọng của biến `loss_ratio` (loss chuẩn hóa về epoch 1): vì `loss_ratio` đo *"đã giảm được bao nhiêu phần so với epoch 1"* chứ không đo *"còn sai số tuyệt đối lớn bao nhiêu"*, nhóm `temp_anomaly` bị hạ trọng số xuống sàn (`0.25`) từ khoảng epoch 10 trở đi dù đây là Pattern có MAE tuyệt đối cao nhất. Phát hiện này dẫn tới hai thí nghiệm khám phá **E1 (`warmup_epochs = 1`)** và **E2 (`policy = loss_abs`)**.
 
 ---
 
-## 4. Thao tác 3 — Đọc bảng MAE theo Pattern qua các Seed (1.5 phút)
+## 4. Thao tác 3 — Đọc bảng MAE theo Pattern qua 3 Seed và 5 Seed (1.5 phút)
 
-1. Quay lại **Trang 1: `1. So sánh cạnh nhau`**, cuộn xuống phần:
-   - **Bảng MAE và RMSE (°C) trên tập Test theo từng Pattern (của các lần chạy đang chọn)**, và
-   - **Bảng tổng hợp Test MAE & RMSE (°C) theo Pattern qua các Seed (`Mean ± Std`)**.
-2. Đọc trực tiếp con số thật trên màn hình (`Mean ± Std` qua `seeds 0, 1, 2`):
-   - So sánh `A0` (`Baseline`), `A1` (`loss_only`, đối chứng chỉ dùng `loss_ratio`), và `A3` (`predictive`, kết hợp `loss_ratio + instability`).
-   - So sánh cặp giảm ngân sách `A0r` (`uniform, budget=0.7`) với `A3r` (`predictive, budget=0.7`) để trả lời công bằng câu hỏi: khi cùng cắt 30% mẫu mỗi epoch, việc chọn mẫu có định hướng của PALF có giữ được Test MAE hoặc cải thiện trên các sự kiện hiếm (`pressure_drop`, `humidity_net_rise`, `temp_anomaly`) so với lấy mẫu ngẫu nhiên đồng đều hay không.
-   - Chỉ rõ cả những pattern mà PALF thắng lẫn những pattern mà PALF hòa hoặc thua nhẹ (đánh đổi khi rút bớt quota của `normal` để dồn cho các pattern hiếm).
+1. Quay lại **Trang 1: `1. So sánh cạnh nhau`**, cuộn xuống **Bảng tổng hợp Test MAE & RMSE (°C) theo Pattern qua các Seed (`Mean ± Std`)**.
+2. Đọc đúng con số thực nghiệm và nêu rõ kết luận trung thực:
+   - **Trên 3 seed gốc (`0, 1, 2`):** Mọi cấu hình đều nằm **trong phạm vi biến động giữa các seed**:
+     - `A0` (`baseline`): `1.7872 ± 0.0335 °C`
+     - `A0r` (`uniform, b=0.7`): `1.7692 ± 0.0111 °C`
+     - `A1` (`loss, b=1.0`): `1.7734 ± 0.0246 °C`
+     - `A3` (`predictive (không đạt ngưỡng G3), b=1.0`): `1.7704 ± 0.0156 °C` (hiệu số ghép `A3 - A1 = -0.0029 ± 0.0108 °C`)
+     - `A3r` (`predictive (không đạt ngưỡng G3), b=0.7`): `1.7701 ± 0.0071 °C`
+   - **Trên toàn bộ 5 seed (`0, 1, 2, 3, 4` — Mục 8.3):** Kết luận âm/trung tính được củng cố vững chắc hơn nữa:
+     - `A0` (`baseline`): `1.7836 ± 0.0255 °C` (`seeds 1..4`: `1.7872 ± 0.0280 °C`)
+     - `A0r` (`uniform, b=0.7`): `1.7678 ± 0.0118 °C` (`seeds 1..4`: `1.7683 ± 0.0135 °C`)
+     - `A1` (`loss, b=1.0`): `1.7618 ± 0.0238 °C` (`seeds 1..4`: `1.7621 ± 0.0275 °C`)
+     - `A3` (`predictive (không đạt ngưỡng G3), b=1.0`): `1.7682 ± 0.0124 °C` (`seeds 1..4`: `1.7707 ± 0.0128 °C`; hiệu số ghép 5 seed `A3 - A1 = +0.0063 ± 0.0148 °C`)
+     - `A3r` (`predictive (không đạt ngưỡng G3), b=0.7`): `1.7699 ± 0.0118 °C` (`seeds 1..4`: `1.7709 ± 0.0134 °C`; hiệu số ghép 5 seed `A3r - A0r = +0.0021 ± 0.0043 °C`)
+   - **Hai thí nghiệm khám phá đặt trước (`seeds 0, 1, 2` — Mục 8.4):**
+     - `E1` (`warmup_epochs = 1`, `predictive`): `1.7873 ± 0.0247 °C` (hiệu số ghép `E1 - A3 = +0.0169 ± 0.0091 °C`). Can thiệp trọng số ngay từ epoch 2 khi mô hình chưa ổn định làm tăng nhẹ sai số dự báo.
+     - `E2` (`policy = loss_abs`, dùng loss tuyệt đối theo Pattern): `1.7756 ± 0.0224 °C` (hiệu số ghép `E2 - A3 = +0.0052 ± 0.0070 °C`, `E2 - A1 = +0.0022 ± 0.0059 °C`).
+   - **Điểm then chốt:** Trên cả 3 seed lẫn 5 seed (kể cả khi tách riêng `seeds 1..4` không dùng để chọn siêu tham số), cấu hình đối chứng **`A0r` (chỉ giảm 30% mẫu ngẫu nhiên mỗi epoch, không phân biệt Pattern)** và **`A1` (chỉ dùng `loss_ratio`)** đạt MAE tổng thể tương đương hoặc thấp hơn nhẹ so với `A3` và `A3r` (dù `A3`/`A3r` có MAE thấp hơn trên nhánh phụ `temp_anomaly_cold`: `~2.40 °C` so với `~2.55 °C`). Mọi chênh lệch tổng thể đều **nằm trong phạm vi biến động giữa các seed**.
 
 ---
 
-## 5. Điều chúng tôi không khẳng định (Giới hạn nghiên cứu trung thực — 1 phút)
+## 5. Điều chúng tôi không khẳng định (Giới hạn nghiên cứu trung thực — 1.5 phút)
 
-Để đảm bảo tính trung thực khoa học, nhóm nêu rõ 4 giới hạn không phóng đại:
-1. **Phạm vi dữ liệu và nhãn Pattern:** Toàn bộ kết quả hiện tại chỉ được kiểm chứng trên tập khí tượng **Jena Climate** với bộ nhãn **Pattern Analyzer v1 dựa trên ngưỡng quy tắc (rule-based)** được tính chỉ từ tập `train`. Chúng tôi chưa khẳng định kết quả tự động tổng quát hóa sang miền dữ liệu khác khi chưa có thực nghiệm bổ sung.
-2. **Kết quả kiểm định G3 về các biến động học (`g3_followup.md`):**
-   - Trước khi kiểm soát hiệu ứng cố định theo epoch (`controls_epoch=False`), các biến đạo hàm (`velocity`, `loss_trend`, `instability`) bị nhiễu bởi nghịch lý Simpson giữa đầu và cuối quá trình huấn luyện ($\Delta R^2 < 0.015$).
-   - Sau khi kiểm soát hiệu ứng epoch (`controls_epoch=True`), `instability` đóng góp có ý nghĩa thống kê trên **GRU** ($\Delta R^2 = 0.0684$, $R^2_{\text{oos}}$ chéo seed tăng `+4.3%` đến `+6.9%`) và **TCN** ($\Delta R^2 = 0.0462$), còn `loss_trend` đạt $\Delta R^2 \ge 0.02$ trên `3/4` backbone (`gru`, `tcn`, `transformer`). Tuy nhiên, trên **PatchTST**, các biến động học bậc cao gần như không mang thêm thông tin dự báo ($\Delta R^2 < 0.004$). Do đó, giá trị của biến động học phụ thuộc vào kiến trúc mô hình chứ không phải quy luật phổ quát cho mọi backbone.
-3. **Bản chất của chính sách `predictive`:** Trong phiên bản v1, chúng tôi bỏ công thức ghép dấu thủ công (`state` heuristic) vì kiểm định G3 cho thấy dấu giả định ban đầu ngược với dữ liệu thực nghiệm; thay vào đó, chính sách `predictive` dùng hệ số hồi quy tuyến tính đa biến ước lượng ngoài mẫu (`predictive_coef_gru_seeds34.json`, fit trên `seeds 3, 4`, đánh giá độc lập trên `seeds 0, 1, 2`).
-4. **Đánh đổi khi tái phân bổ mẫu:** Khi giữ tổng ngân sách cố định (`budget_ratio = 1.0` hoặc `0.7`), việc tăng tần suất lặp mẫu cho các sự kiện hiếm đồng nghĩa với việc giảm số lượt duyệt mẫu `normal`. Mọi cải thiện hoặc suy giảm cục bộ theo từng pattern đều được báo cáo đầy đủ kèm khoảng lệch chuẩn qua các seed.
+1. **Kết quả G3 không đạt ngưỡng đăng ký trước:** Sau khi kiểm soát hiệu ứng cố định theo epoch (`controls_epoch=True`), chỉ có `2/4` backbone (`GRU`, `TCN`) đạt $\Delta R^2 \ge 0.02$ cho `instability`, và dấu $\beta$ đổi chiều ở `PatchTST`. Theo đúng quy tắc đặt trước, kết quả G3 là **"lui về phương án dự phòng"**; cấu hình `A3` chạy thử nghiệm với tên gọi rõ ràng là **`predictive (không đạt ngưỡng G3)`**.
+2. **Hiệu ứng làm mượt trong G3 là hiệu ứng cơ học:** Việc làm mượt chuỗi (`ma3`, `ema`) tạo ra $\Delta R^2 = 0.23\text{–}0.43$ là hệ quả cơ học do đặc trưng và mục tiêu cùng tính trên chuỗi trượt chồng lấn, tuyệt đối không được dùng làm bằng chứng ủng hộ giả thuyết.
+3. **Hội tụ sớm & hạn chế của `loss_ratio`:** Điểm `val_loss` tốt nhất rơi vào epoch 4–6 ngay sau `warmup_epochs = 3`, khiến Policy chỉ kịp tác động 1–2 epoch trước điểm dừng sớm; đồng thời `loss_ratio` chuẩn hóa theo epoch 1 làm giảm trọng số của `temp_anomaly` dù sai số tuyệt đối của nhóm này còn cao nhất.
+4. **Phạm vi dữ liệu:** Kết quả chỉ thực hiện trên bộ dữ liệu Jena Climate với 4 nhãn Pattern phân vị (`normal` 66,9%, `temp_anomaly` 16,7%, `pressure_drop` 9,0%, `humidity_net_rise` 7,5%).

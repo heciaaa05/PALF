@@ -99,6 +99,8 @@ class PolicyEngine:
             return (), {}
         if self.cfg.policy == "loss":
             return ("loss_ratio",), {"loss_ratio": 1.0}
+        if self.cfg.policy == "loss_abs":
+            return ("loss_abs",), {"loss_abs": 1.0}
         if self.cfg.policy == "predictive":
             feats = tuple(self.predictive_coef["features"])
             return feats, {f: float(self.predictive_coef["coef"][f]) for f in feats}
@@ -117,12 +119,29 @@ class PolicyEngine:
         # Chi trich xuat cac bien Learning State hop le cua tung Pattern (bo qua moi khoa val/test neu co)
         tracked_vars = tuple(dict.fromkeys(list(active_vars) + list(self.cfg.state_vars)))
         clean_state = {}
+        raw_lm = {}
         for p in self.pattern_names:
             p_st = state.get(p, {}) if isinstance(state.get(p, {}), dict) else {}
             clean_state[p] = {
                 v: float(p_st.get(v, np.nan)) if p_st.get(v) is not None else float("nan")
                 for v in tracked_vars
             }
+            if "loss_mean" in p_st and p_st["loss_mean"] is not None:
+                raw_lm[p] = float(p_st["loss_mean"])
+
+        # Ho tro tinh loss_abs tu loss_mean neu state truyen truc tiep loss_mean ma chua chia trung binh toan bo
+        if "loss_abs" in tracked_vars:
+            need_compute_abs = any(
+                np.isnan(clean_state[p].get("loss_abs", np.nan)) and p in raw_lm and np.isfinite(raw_lm[p])
+                for p in self.pattern_names
+            )
+            if need_compute_abs:
+                valid_lms = [v for v in raw_lm.values() if np.isfinite(v) and v >= 0.0]
+                g_mean = float(np.mean(valid_lms)) if valid_lms else float("nan")
+                if np.isfinite(g_mean) and g_mean > 0.0:
+                    for p in self.pattern_names:
+                        if np.isnan(clean_state[p].get("loss_abs", np.nan)) and p in raw_lm and np.isfinite(raw_lm[p]):
+                            clean_state[p]["loss_abs"] = float(raw_lm[p] / g_mean)
 
         # 1. Che do uniform hoac dang trong giai doan warm-up -> moi w = 1.0
         if self.cfg.policy == "uniform" or in_warmup:

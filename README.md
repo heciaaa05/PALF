@@ -8,8 +8,8 @@ Thay vì đối xử đồng đều với mọi cửa sổ thời gian trong su�
 
 ## 1. Động lực & Bài toán (Motivation)
 
-Trong dữ liệu chuỗi thời gian thực tế (như bộ dữ liệu khí tượng **Jena Climate 2009–2016**):
-- Khoảng **73.8%** số cửa sổ thời gian thuộc trạng thái thời tiết bình thường (`normal`), trong khi các hiện tượng biến động mạnh hoặc cực đoan như **sụt áp nhanh** (`pressure_drop`), **độ ẩm tăng đột ngột** (`humidity_net_rise`), và **dị thường nhiệt độ nóng/lạnh** (`temp_anomaly`) chỉ chiếm từ **7% – 10%** mỗi loại.
+Trong dữ liệu chuỗi thời gian thực tế (như bộ dữ liệu khí tượng **Jena Climate 2009–2016** với `n_train = 48,981`, `n_val = 10,377`, `n_test = 10,377`):
+- Trên tập test (`10,377` mẫu), trạng thái thời tiết bình thường (`normal`) chiếm **66,9%** (`6,942` mẫu), trong khi 3 nhóm biến động theo ngưỡng phân vị gồm **dị thường nhiệt độ nóng/lạnh** (`temp_anomaly`, **16,7%**, `1,730` mẫu), **sụt áp nhanh** (`pressure_drop`, **9,0%**, `929` mẫu), và **độ ẩm tăng ròng mạnh** (`humidity_net_rise`, **7,5%**, `776` mẫu).
 - Khi huấn luyện đồng đều (*uniform sampling*), các mẫu `normal` áp đảo gradient và hội tụ sớm, trong khi các Pattern hiếm/biến động có tốc độ giảm lỗi và độ bất ổn khác biệt rõ rệt theo từng giai đoạn huấn luyện.
 - **Mục tiêu của PALF:** Đóng vòng phản hồi tự động sau mỗi epoch để phân bổ lại ngân sách mẫu huấn luyện về các Pattern đang cần học hơn, giúp:
   1. **Cùng ngân sách mẫu ($\rho = 1.0$):** Kiểm tra khả năng cải thiện chất lượng dự báo trên các Pattern khó.
@@ -135,17 +135,36 @@ PALF/
 
 ---
 
-## 5. Kết quả Thực nghiệm 30 Epoch trên Tập Jena Climate (`GRU`, `seeds 0, 1, 2`)
+## 5. Kết quả Thực nghiệm trên Tập Jena Climate (`GRU`, 3 Seed & 5 Seed — Prompt 8)
 
-Bảng tổng hợp từ [`experiments/analysis/comparison/comparison_report.md`](file:///d:/Github/PALF/experiments/analysis/comparison/comparison_report.md) (`n_train = 48,981`, `n_val = 10,492`, `n_test = 10,493`, `30 epoch`, `batch = 128`, `lr = 1e-3`):
+Bảng tổng hợp từ [`experiments/analysis/comparison/comparison_report.md`](file:///d:/Github/PALF/experiments/analysis/comparison/comparison_report.md) (`n_train = 48,981`, `n_val = 10,377`, `n_test = 10,377`, `epochs = 30`, `batch = 128`, `lr = 1e-3`):
 
-| Mã | Cấu hình (`config_tag`) | Số seed | Test MAE (°C) ↓ | Test RMSE (°C) ↓ | Best Val Loss ↓ | Mẫu tới `val_target` ↓ | MAE `pressure_drop` (°C) ↓ | MAE `temp_anomaly_cold` (°C) ↓ |
+> **Nhận xét quan trọng (kết luận trung thực):**
+> 1. **Trên cả 3 seed (`0, 1, 2`) và 5 seed (`0, 1, 2, 3, 4`):** Chênh lệch Test MAE tổng thể giữa mọi cấu hình đều **nằm trong phạm vi biến động giữa các seed**. Trên 5 seed, hiệu số ghép `A3 - A1 = +0.0063 ± 0.0148 °C` và `A3r - A0r = +0.0021 ± 0.0043 °C`. Cấu hình `A0r` (chỉ giảm 30% mẫu ngẫu nhiên mỗi epoch, không phân biệt Pattern) và `A1` (chỉ dùng `loss_ratio`) đạt MAE tổng thể tương đương `A3`/`A3r`.
+> 2. **Định danh G3:** Tiêu chí G3 đặt trước cho kết quả **"lui về phương án dự phòng"** (chỉ 2/4 backbone đạt $\Delta R^2 \ge 0.02$ sau kiểm soát epoch và dấu $\beta$ không cùng chiều ở PatchTST), nên `A3` và `A3r` được gọi đúng tên là **`predictive (không đạt ngưỡng G3)`**.
+> 3. **Hai thí nghiệm khám phá đặt trước (`E1: warmup_epochs=1`, `E2: policy=loss_abs` trên `seeds 0, 1, 2`):** Cả `E1` (`1.7873 ± 0.0247 °C`) và `E2` (`1.7756 ± 0.0224 °C`) đều không vượt qua đối chứng `A0r`/`A1`/`A3` và được giữ nguyên đầy đủ trong báo cáo.
+
+### 5.1. Bảng 5 Seed hoàn chỉnh (`seeds 0, 1, 2, 3, 4`) & Trung bình 4 Seed độc lập (`seeds 1..4`)
+
+| Mã | Cấu hình (`config_tag`) | Test MAE (°C) 5 seed (`0..4`) ↓ | Test MAE (°C) 4 seed (`1..4`) ↓ | Test RMSE (°C) 5 seed ↓ | Best Val Loss 5 seed ↓ | Best Epoch | MAE `pressure_drop` (°C) ↓ | MAE `temp_anomaly_cold` (°C) ↓ |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`A0`** | `baseline` (`uniform, b=1.0`) | `3 (0,1,2)` | `1.7872 ± 0.0335` | `2.3517 ± 0.0411` | `0.0818 ± 0.0003` | `163,270` | `1.7411 ± 0.0599` | `2.5131 ± 0.2079` |
-| **`A0r`** | `uniform_b0.7` (`uniform, b=0.7`) | `3 (0,1,2)` | **`1.7692 ± 0.0111`** | `2.3334 ± 0.0173` | `0.0808 ± 0.0005` | `171,435` | `1.7006 ± 0.0399` | `2.5354 ± 0.1950` |
-| **`A1`** | `loss_b1.0_a1.0` (`loss_only, b=1.0`) | `3 (0,1,2)` | `1.7734 ± 0.0246` | `2.3392 ± 0.0371` | `0.0814 ± 0.0020` | `212,251` | `1.6926 ± 0.0435` | `2.5206 ± 0.2445` |
-| **`A3`** | `predictive_b1.0_a0.5_w2` (`b=1.0`) | `3 (0,1,2)` | `1.7704 ± 0.0156` | **`2.3309 ± 0.0195`** | `0.0802 ± 0.0020` | `212,251` | **`1.6881 ± 0.0418`** | **`2.3760 ± 0.0660`** |
-| **`A3r`** | `predictive_b0.7_a0.5_w2` (`b=0.7`) | `3 (0,1,2)` | `1.7701 ± 0.0071` | `2.3319 ± 0.0114` | **`0.0801 ± 0.0008`** | **`160,006`** | `1.6930 ± 0.0255` | `2.3918 ± 0.0638` |
+| **`A0`** | `baseline` (`uniform, b=1.0`) | `1.7836 ± 0.0255` | `1.7872 ± 0.0280` | `2.3446 ± 0.0326` | `0.0809 ± 0.0017` | `5.6` | `1.7223 ± 0.0537` | `2.5131 ± 0.2079` *(3s)* |
+| **`A0r`** | `uniform_b0.7` (`uniform, b=0.7`) | `1.7678 ± 0.0118` | `1.7683 ± 0.0135` | `2.3331 ± 0.0148` | `0.0805 ± 0.0009` | `6.4` | `1.6969 ± 0.0333` | `2.5505 ± 0.1456` |
+| **`A1`** | `loss_b1.0_a1.0` (`loss_only, b=1.0`) | **`1.7618 ± 0.0238`** | **`1.7621 ± 0.0275`** | `2.3321 ± 0.0312` | `0.0811 ± 0.0019` | `5.8` | `1.6893 ± 0.0313` | `2.5612 ± 0.2162` |
+| **`A3`** | `predictive_b1.0_a0.5_w2` *(không đạt ngưỡng G3)* | `1.7682 ± 0.0124` | `1.7707 ± 0.0128` | **`2.3308 ± 0.0140`** | `0.0801 ± 0.0015` | `5.2` | `1.6889 ± 0.0339` | `2.4060 ± 0.0622` |
+| **`A3r`** | `predictive_b0.7_a0.5_w2` *(không đạt ngưỡng G3)* | `1.7699 ± 0.0118` | `1.7709 ± 0.0134` | `2.3323 ± 0.0120` | **`0.0799 ± 0.0013`** | `6.2` | **`1.6855 ± 0.0283`** | **`2.4016 ± 0.0709`** |
+
+### 5.2. Bảng 3 Seed gốc (`seeds 0, 1, 2`) & Hai thí nghiệm khám phá (`E1`, `E2`)
+
+| Mã | Cấu hình (`config_tag`) | Số seed | Test MAE (°C) ↓ | Test RMSE (°C) ↓ | Best Val Loss ↓ | Best Epoch | MAE `pressure_drop` (°C) ↓ | MAE `temp_anomaly_cold` (°C) ↓ |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`A0`** | `baseline` (`uniform, b=1.0`) | `3 (0,1,2)` | `1.7872 ± 0.0335` | `2.3517 ± 0.0411` | `0.0818 ± 0.0003` | `5.7` | `1.7411 ± 0.0599` | `2.5131 ± 0.2079` |
+| **`A0r`** | `uniform_b0.7` (`uniform, b=0.7`) | `3 (0,1,2)` | **`1.7692 ± 0.0111`** | `2.3334 ± 0.0173` | `0.0808 ± 0.0005` | `6.0` | `1.7006 ± 0.0399` | `2.5354 ± 0.1950` |
+| **`A1`** | `loss_b1.0_a1.0` (`loss_only, b=1.0`) | `3 (0,1,2)` | `1.7734 ± 0.0246` | `2.3392 ± 0.0371` | `0.0814 ± 0.0020` | `5.7` | `1.6926 ± 0.0435` | `2.5206 ± 0.2445` |
+| **`A3`** | `predictive_b1.0_a0.5_w2` *(không đạt ngưỡng G3)* | `3 (0,1,2)` | `1.7704 ± 0.0156` | **`2.3309 ± 0.0195`** | `0.0802 ± 0.0020` | `5.3` | **`1.6881 ± 0.0418`** | **`2.3760 ± 0.0660`** |
+| **`A3r`** | `predictive_b0.7_a0.5_w2` *(không đạt ngưỡng G3)* | `3 (0,1,2)` | `1.7701 ± 0.0071` | `2.3319 ± 0.0114` | **`0.0801 ± 0.0008`** | `6.3` | `1.6930 ± 0.0255` | `2.3918 ± 0.0638` |
+| **`E1`** | `e1_warmup1_b1.0_a0.5_w2` *(khám phá: `warmup=1`)* | `3 (0,1,2)` | `1.7873 ± 0.0247` | `2.3577 ± 0.0204` | `0.0811 ± 0.0013` | `6.0` | `1.7177 ± 0.0261` | `2.4786 ± 0.1111` |
+| **`E2`** | `loss_abs_b1.0_a0.5_w2` *(khám phá: `loss_abs`)* | `3 (0,1,2)` | `1.7756 ± 0.0224` | `2.3417 ± 0.0280` | `0.0816 ± 0.0017` | `4.3` | `1.7013 ± 0.0377` | `2.4945 ± 0.1244` |
 
 ---
 

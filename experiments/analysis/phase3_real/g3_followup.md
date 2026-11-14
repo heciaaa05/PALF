@@ -1,10 +1,10 @@
-# Báo cáo G3 Follow-up: Kiểm soát Epoch, Lọc Nhiễu & Kiểm định Mean-Reversion (Prompt 7 — Phần 4)
+# Báo cáo G3 Follow-up: Kiểm soát Epoch, Lọc Nhiễu & Kiểm định Mean-Reversion (Prompt 7 — Phần 4 & Prompt 8)
 
 ## 1. Kết luận theo ngưỡng đặt trước (Pre-registered Decision Rule)
 
 - **Ngưỡng đặt trước (Prompt 7 Phần 4.3):** *Learning State được giữ nếu $\Delta R^2$ sau kiểm soát epoch $\ge 0.02$ ở ít nhất 3/4 backbone và dấu $\beta$ cùng chiều ở cả 4. Nếu không, báo "lui về phương án dự phòng".*
-- **Kết quả của `instability` (`prediction_stability_ps`):** Số backbone có $\Delta R^2 \ge 0.02$ sau kiểm soát epoch = **2/4** | Dấu $\beta$ cùng chiều ở cả 4 backbone = **False**.
-- **Quyết định chính thức:** **LUI VỀ PHƯƠNG ÁN DỰ PHÒNG (không đạt ngưỡng ΔR² ≥ 0.02 ở ≥ 3/4 backbone và cùng dấu ở cả 4)**.
+- **Kết quả của `instability` (`prediction_stability_ps`):** Số backbone có $\Delta R^2 \ge 0.02$ sau kiểm soát epoch = **2/4** | Dấu $\beta$ cùng chiều ở cả 4 backbone = **False** (dấu $\beta$ của `instability` đổi từ $+$ sang $-$ sau khi kiểm soát epoch ở GRU, TCN nhưng mang dấu $+$ ngược lại ở PatchTST, tức không nhất quán giữa các kiến trúc).
+- **Quyết định chính thức:** **LUI VỀ PHƯƠNG ÁN DỰ PHÒNG (không đạt ngưỡng ΔR² ≥ 0.02 ở ≥ 3/4 backbone và cùng dấu ở cả 4)** (mọi thực nghiệm dùng `predictive` phải ghi rõ nhãn **`predictive (không đạt ngưỡng G3)`**).
 
 ## 2. Kiểm tra (a) — Trước và Sau khi Kiểm soát Hiệu ứng Cố định theo Epoch (`controls_epoch`)
 
@@ -30,6 +30,8 @@
 
 ### 3.1. Trên đường cong loss đã làm mượt (có kiểm soát epoch)
 
+> **Cảnh báo phương pháp luận (Phát hiện 7, Prompt 8):** Các con số $\Delta R^2 = 0.23\text{–}0.43$ khi tính trên chuỗi làm mượt (`ma3`, `ema`) là **hiệu ứng cơ học** (*mechanical artifact*) do đặc trưng tại epoch $e$ và mục tiêu tại $e+k$ cùng được tính trên các cửa sổ làm mượt chồng lấn nhau. **Tuyệt đối không trích dẫn các con số `ma3`/`ema` này làm bằng chứng thực nghiệm.** Chỉ sử dụng kết quả trên chuỗi `raw` (Mục 2 và Mục 3.2).
+
 | smoothing | scope | variable | delta_r2_after_fe | beta_after_fe | p_after_fe |
 | --- | --- | --- | --- | --- | --- |
 | raw | gru | instability | 0.0684 | -0.3657 | 0.0000 |
@@ -51,7 +53,7 @@
 | ema | pooled | loss_trend | 0.2727 | 0.7187 | 0.0000 |
 | ema | pooled | velocity | 0.1261 | -0.6036 | 0.0000 |
 
-### 3.2. $R^2$ ngoài mẫu chéo giữa các Seed (`Seed 0-2 -> 3-4` và `Seed 3-4 -> 0-2`)
+### 3.2. $R^2$ ngoài mẫu chéo giữa các Seed (`Seed 0-2 -> 3-4` và `Seed 3-4 -> 0-2`, trên chuỗi `raw`)
 
 | scope | variable | r2_oos_012_to_34_loss | r2_oos_012_to_34_full | delta_r2_oos_012_to_34 | r2_oos_34_to_012_loss | r2_oos_34_to_012_full | delta_r2_oos_34_to_012 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -91,8 +93,9 @@
 | pooled | 0.2083 | 0.0128 | loss_trend | 0.1306 | -2.8110 |
 | pooled | 0.2083 | 0.0128 | velocity | 0.0000 | 0.0050 |
 
-## 5. Hệ số xuất ra trong `predictive_coef.json` (Bản GRU học trên Seed 3–4, dùng cho Seed 0–2)
+## 5. Hệ số xuất ra trong `predictive_coef_gru_seeds34.json` (Học trên Seed 3–4, dùng cho Seed 0–2) và `predictive_coef_gru_seeds012.json` (Học trên Seed 0–2, dùng cho Seed 3–4)
 
+### 5.1. `predictive_coef_gru_seeds34.json` (`fit_seeds: [3, 4]`)
 ```json
 {
   "target": "delta_loss_k3",
@@ -119,6 +122,39 @@
   "fit_seeds": [
     3,
     4
+  ],
+  "controls_epoch": true
+}
+```
+
+### 5.2. `predictive_coef_gru_seeds012.json` (`fit_seeds: [0, 1, 2]`)
+```json
+{
+  "target": "delta_loss_k3",
+  "features": [
+    "loss_ratio",
+    "instability"
+  ],
+  "standardize": {
+    "loss_ratio": {
+      "mean": 0.24851228067083497,
+      "std": 0.13546546271585946
+    },
+    "instability": {
+      "mean": 0.022911785096253273,
+      "std": 0.04168870932423931
+    }
+  },
+  "intercept": -0.04603362365760539,
+  "coef": {
+    "loss_ratio": -0.019478143472018827,
+    "instability": -0.011935281417205226
+  },
+  "fit_scope": "gru",
+  "fit_seeds": [
+    0,
+    1,
+    2
   ],
   "controls_epoch": true
 }

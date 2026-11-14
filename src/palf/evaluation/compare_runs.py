@@ -13,14 +13,19 @@ from .demo_loader import (
     load_saved_run,
 )
 
-# Danh sach cau hinh chuan theo Spec v1 Muc 7 & Prompt 7 Phan 5.2
-# Luu y (Prompt 7 Phan 1 Buoc 3b): khong dung 'state' (A2) trong bang so sanh chinh; thay bang 'predictive' (A3, A3r).
+# Danh sach cau hinh chuan theo Spec v1 Muc 7, Prompt 7 Phan 5.2 & Prompt 8
+# Luu y (Prompt 8): A3 va A3r phai ghi ro 'predictive (khong dat nguong G3)'.
 STANDARD_CONFIGS = [
     {"code": "A0", "mode": "baseline", "policy": "uniform", "config_tag": "baseline", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform (budget 1.0)"},
     {"code": "A0r", "mode": "palf", "policy": "uniform", "config_tag": "uniform_b0.7", "budget_ratio": 0.7, "ref_code": "A0", "desc": "Baseline uniform qua Scheduler (budget 0.7)"},
     {"code": "A1", "mode": "palf", "policy": "loss", "config_tag": "loss_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Doi chung B2 chi dung loss_ratio (budget 1.0)"},
-    {"code": "A3", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "PALF v1 Predictive Learning State (budget 1.0)"},
-    {"code": "A3r", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b0.7_a1.0", "budget_ratio": 0.7, "ref_code": "A0r", "desc": "PALF v1 Predictive giam ngan sach (budget 0.7)"},
+    {"code": "A3", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0", "desc": "predictive (khong dat nguong G3, budget 1.0)"},
+    {"code": "A3r", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b0.7_a0.5_w2", "budget_ratio": 0.7, "ref_code": "A0r", "desc": "predictive (khong dat nguong G3, budget 0.7)"},
+]
+
+EXPLORATORY_CONFIGS = [
+    {"code": "E1", "mode": "palf", "policy": "predictive", "config_tag": "e1_warmup1_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0", "desc": "[Kham pha E1] predictive (khong dat nguong G3, warmup=1)"},
+    {"code": "E2", "mode": "palf", "policy": "loss_abs", "config_tag": "loss_abs_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0", "desc": "[Kham pha E2] loss_abs (loss tuyet doi theo Pattern, warmup=3)"},
 ]
 
 
@@ -63,7 +68,7 @@ def validate_protocol_consistency(found_runs: List[dict], check_seeds: bool = Tr
     if not found_runs:
         return
 
-    fields_to_check = ("n_train", "n_val", "n_test", "epochs", "epochs_run", "batch", "lr")
+    fields_to_check = ("n_train", "n_val", "n_test", "epochs", "batch", "lr")
 
     # Nhom theo backbone de so sanh cac cau hinh tren cung backbone (va giua cac backbone cho cung tap du lieu)
     ref_run = found_runs[0]
@@ -293,6 +298,7 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
         "mae_degC",
         "rmse_degC",
         "best_val_loss",
+        "best_epoch",
         "samples_to_target",
         "time_sec_to_target",
         "val_auc_samples",
@@ -329,8 +335,10 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
             ref_candidates = [g_cur["ref_code"].iloc[0]]
             if "A0" not in ref_candidates:
                 ref_candidates.append("A0")
-            if code in ("A3", "A2") and "A1" in by_code and "A1" not in ref_candidates:
+            if code in ("A3", "A2", "E1", "E2") and "A1" in by_code and "A1" not in ref_candidates:
                 ref_candidates.insert(0, "A1")
+            if code in ("E1", "E2") and "A3" in by_code and "A3" not in ref_candidates:
+                ref_candidates.insert(0, "A3")
             for ref_c in ref_candidates:
                 if ref_c not in by_code:
                     continue
@@ -447,71 +455,143 @@ def plot_comparison_figures(
     return saved_figs
 
 
+def _format_overall_table(summary_df: pd.DataFrame) -> List[str]:
+    if summary_df.empty:
+        return ["*Không tìm thấy lần chạy nào.*"]
+    out = [
+        "| Backbone | Mã | Config Tag | Mô tả | Số seed | Test MAE (°C) | Test RMSE (°C) | Best Val Loss | Best Epoch | Mẫu tới `val_target` | Ghi chú |",
+        "|---|---|---|---|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    desc_map = {c["code"]: c["desc"] for c in STANDARD_CONFIGS + EXPLORATORY_CONFIGS}
+    for _, r in summary_df.iterrows():
+        samp_str = f"{r['samples_to_target_mean']:.0f}" if pd.notna(r["samples_to_target_mean"]) else "Chưa đạt"
+        desc_str = desc_map.get(r["code"], str(r["config_tag"]))
+        out.append(
+            f"| `{r['model'].upper()}` | **{r['code']}** | `{r['config_tag']}` | {desc_str} | {int(r['n_seeds'])} ({r['seeds']}) | "
+            f"{r['mae_degC_mean']:.4f} ± {r['mae_degC_std']:.4f} | "
+            f"{r['rmse_degC_mean']:.4f} ± {r['rmse_degC_std']:.4f} | "
+            f"{r['best_val_loss_mean']:.4f} ± {r['best_val_loss_std']:.4f} | "
+            f"{r.get('best_epoch_mean', float('nan')):.1f} | "
+            f"{samp_str} ({int(r['n_reached_target'])}/{int(r['n_seeds'])}) | "
+            f"{r['stat_note']} |"
+        )
+    return out
+
+
+def _format_pattern_table(pat_summary_df: pd.DataFrame) -> List[str]:
+    if pat_summary_df.empty:
+        return ["*Không có dữ liệu theo Pattern.*"]
+    out = [
+        "| Backbone | Mã | Nhóm | Pattern | Số mẫu test | MAE (°C) (Mean ± Std) | RMSE (°C) (Mean ± Std) | Chênh lệch MAE so với `normal` (°C) |",
+        "|---|---|---|---|---:|---:|---:|---:|",
+    ]
+    for _, r in pat_summary_df.iterrows():
+        out.append(
+            f"| `{r['model'].upper()}` | **{r['code']}** | `{r['group_type']}` | `{r['pattern']}` | {int(r['n_test'])} | "
+            f"{r['mae_degC_mean']:.4f} ± {r['mae_degC_std']:.4f} | "
+            f"{r['rmse_degC_mean']:.4f} ± {r['rmse_degC_std']:.4f} | "
+            f"{r['gap_mae_vs_normal_mean']:+.4f} |"
+        )
+    return out
+
+
+def _format_paired_table(paired_df: pd.DataFrame) -> List[str]:
+    if paired_df.empty:
+        return ["*Chưa có cặp cấu hình PALF vs đối chứng cùng seed để tính hiệu số ghép cặp.*"]
+    out = [
+        "| Backbone | Cấu hình | Đối chứng | Chỉ số | Số seed ghép | Hiệu số (Mean ± Std) | Hiệu số từng seed | Ghi chú |",
+        "|---|---|---|---|---:|---:|---|---|",
+    ]
+    for _, r in paired_df[paired_df["metric"] != "time_sec_to_target"].iterrows():
+        out.append(
+            f"| `{r['model'].upper()}` | **{r['code']}** | **{r['ref_code']}** | `{r['metric']}` | {int(r['n_paired_seeds'])} | "
+            f"{r['diff_mean']:+.4f} ± {r['diff_std']:.4f} | `{r['per_seed_diffs']}` | {r['stat_note']} |"
+        )
+    return out
+
+
 def write_comparison_markdown(
     summary_df: pd.DataFrame,
     pat_summary_df: pd.DataFrame,
     paired_df: pd.DataFrame,
     missing_df: pd.DataFrame,
     out_path: str,
+    extra_sections: Optional[dict] = None,
 ) -> str:
     lines = [
-        "# Báo cáo So sánh Giao thức Công bằng: Baseline vs PALF (Spec v1 — Mục 7)",
+        "# Báo cáo So sánh Giao thức Công bằng: Baseline vs PALF (Spec v1 — Mục 7 & Prompt 8)",
         "",
-        "> **Quy tắc thống kê & đồng nhất (Spec v1 Mục 7):**",
+        "> **Quy tắc thống kê, đồng nhất & định danh G3 (Spec v1 Mục 7 & Prompt 8):**",
         "> 1. Mọi lần chạy trong bảng bắt buộc có cùng `n_train`, `n_val`, `n_test`, `epochs`, `batch`, `lr` và cùng danh sách `seeds` (các lần chạy thử nhỏ lưu riêng ở `experiments/results/smoke/`).",
-        "> 2. Với cấu hình có ít hơn 5 seed (`n_seeds < 5`), báo cáo **chỉ mô tả xu hướng** và hiệu số ghép theo từng seed, tuyệt đối **không tuyên bố ý nghĩa thống kê**.",
+        "> 2. Tiêu chí G3 đặt trước cho kết quả **\"lui về phương án dự phòng\"** (chỉ 2/4 backbone đạt $\\Delta R^2 \\ge 0.02$ sau kiểm soát epoch và dấu $\\beta$ không cùng chiều ở PatchTST). Do đó, cấu hình **A3** và **A3r** được gọi đúng tên là **`predictive (không đạt ngưỡng G3)`**.",
+        "> 3. **Ghi chú về thời gian chạy:** Thời gian chạy (`epoch_time_sec`, `time_sec_to_target`, `overhead_sec`) không so sánh được giữa các máy/lần chạy khác nhau và đường mã lấy mẫu khác nhau, không dùng để kết luận và được chuyển xuống **Phụ lục** ở cuối báo cáo.",
         "",
-        "## 1. Bảng tổng hợp toàn cục theo Cấu hình & Backbone",
+        "## 1. Bảng tổng hợp chính theo Cấu hình & Backbone",
         "",
     ]
 
-    if summary_df.empty:
-        lines.append("*Không tìm thấy lần chạy nào.*")
-    else:
-        lines.append(
-            "| Backbone | Mã | Config Tag | Số seed | Test MAE (°C) | Test RMSE (°C) | Best Val Loss | Mẫu tới `val_target` | Giây tới `val_target` | AUC Val (mẫu) | Epoch time (s) | Overhead PALF (s) | Ghi chú |"
-        )
-        lines.append("|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
-        for _, r in summary_df.iterrows():
-            samp_str = f"{r['samples_to_target_mean']:.0f}" if pd.notna(r["samples_to_target_mean"]) else "Chưa đạt"
-            t_str = f"{r['time_sec_to_target_mean']:.1f}s" if pd.notna(r["time_sec_to_target_mean"]) else "Chưa đạt"
-            lines.append(
-                f"| `{r['model'].upper()}` | **{r['code']}** | `{r['config_tag']}` | {int(r['n_seeds'])} ({r['seeds']}) | "
-                f"{r['mae_degC_mean']:.4f} ± {r['mae_degC_std']:.4f} | "
-                f"{r['rmse_degC_mean']:.4f} ± {r['rmse_degC_std']:.4f} | "
-                f"{r['best_val_loss_mean']:.4f} ± {r['best_val_loss_std']:.4f} | "
-                f"{samp_str} ({int(r['n_reached_target'])}/{int(r['n_seeds'])}) | {t_str} | "
-                f"{r['val_auc_samples_mean']:.4f} | {r['mean_epoch_time_sec_mean']:.2f}s | "
-                f"{r['mean_overhead_sec_mean']:.4f}s | {r['stat_note']} |"
-            )
+    lines.extend(_format_overall_table(summary_df))
+
+    if extra_sections:
+        if "summary_3seeds_df" in extra_sections and not extra_sections["summary_3seeds_df"].empty:
+            lines.extend([
+                "",
+                "### 1b. Bảng đối chiếu nguyên vẹn trên 3 Seed gốc (`seeds 0, 1, 2` — theo Mục 8.3)",
+                "",
+            ])
+            lines.extend(_format_overall_table(extra_sections["summary_3seeds_df"]))
+
+        if "summary_4seeds_df" in extra_sections and not extra_sections["summary_4seeds_df"].empty:
+            lines.extend([
+                "",
+                "### 1c. Bảng trung bình 4 Seed độc lập (`seeds 1, 2, 3, 4` — tách khỏi `seed 0` đã dùng chọn siêu tham số ở Bước 5.1)",
+                "",
+            ])
+            lines.extend(_format_overall_table(extra_sections["summary_4seeds_df"]))
 
     lines.extend(["", "## 2. Bảng MAE và RMSE (°C) theo từng Pattern (kể cả tách `temp_anomaly` nóng/lạnh)", ""])
-    if pat_summary_df.empty:
-        lines.append("*Không có dữ liệu theo Pattern.*")
-    else:
-        lines.append("| Backbone | Mã | Nhóm | Pattern | Số mẫu test | MAE (°C) (Mean ± Std) | RMSE (°C) (Mean ± Std) | Chênh lệch MAE so với `normal` (°C) |")
-        lines.append("|---|---|---|---|---:|---:|---:|---:|")
-        for _, r in pat_summary_df.iterrows():
-            lines.append(
-                f"| `{r['model'].upper()}` | **{r['code']}** | `{r['group_type']}` | `{r['pattern']}` | {int(r['n_test'])} | "
-                f"{r['mae_degC_mean']:.4f} ± {r['mae_degC_std']:.4f} | "
-                f"{r['rmse_degC_mean']:.4f} ± {r['rmse_degC_std']:.4f} | "
-                f"{r['gap_mae_vs_normal_mean']:+.4f} |"
-            )
+    lines.extend(_format_pattern_table(pat_summary_df))
 
     lines.extend(["", "## 3. So sánh ghép cặp theo Seed (Paired Differences vs A0 / A0r / A1)", ""])
-    if paired_df.empty:
-        lines.append("*Chưa có cặp cấu hình PALF vs đối chứng cùng seed để tính hiệu số ghép cặp.*")
-    else:
-        lines.append("| Backbone | Cấu hình | Đối chứng | Chỉ số | Số seed ghép | Hiệu số (Mean ± Std) | Hiệu số từng seed | Ghi chú |")
-        lines.append("|---|---|---|---|---:|---:|---|---|")
-        for _, r in paired_df.iterrows():
-            lines.append(
-                f"| `{r['model'].upper()}` | **{r['code']}** | **{r['ref_code']}** | `{r['metric']}` | {int(r['n_paired_seeds'])} | "
-                f"{r['diff_mean']:+.4f} ± {r['diff_std']:.4f} | `{r['per_seed_diffs']}` | {r['stat_note']} |"
-            )
+    lines.extend(_format_paired_table(paired_df))
 
-    lines.extend(["", "## 4. Báo cáo các cấu hình còn thiếu (Missing Configurations)", ""])
+    if extra_sections and "paired_3seeds_df" in extra_sections and not extra_sections["paired_3seeds_df"].empty:
+        lines.extend([
+            "",
+            "### 3b. Hiệu số ghép cặp trên 3 Seed gốc (`seeds 0, 1, 2`)",
+            "",
+        ])
+        lines.extend(_format_paired_table(extra_sections["paired_3seeds_df"]))
+
+    if extra_sections and "exploratory_summary_df" in extra_sections and not extra_sections["exploratory_summary_df"].empty:
+        lines.extend([
+            "",
+            "## 4. Hai thí nghiệm khám phá đặt trước trên GRU (`E1: warmup_epochs=1` & `E2: policy=loss_abs`, `seeds 0, 1, 2`)",
+            "",
+            "> **Ghi chú tiền đăng ký (Prompt 8 — Mục 8.4):** Cả hai thí nghiệm **E1** (`policy=predictive`, `warmup_epochs=1`, `alpha=0.5`, `w_max=2.0`) và **E2** (`policy=loss_abs`, `warmup_epochs=3`, `alpha=0.5`, `w_max=2.0`) được báo cáo đầy đủ bất kể kết quả cải thiện hay không, đặt cạnh `A0`, `A0r`, `A1`, `A3` trên cùng `seeds 0, 1, 2`.",
+            "",
+            "### 4a. Bảng tổng hợp toàn cục (`E1`, `E2` đặt cạnh `A0`, `A0r`, `A1`, `A3` — `seeds 0, 1, 2`)",
+            "",
+        ])
+        lines.extend(_format_overall_table(extra_sections["exploratory_summary_df"]))
+
+        if "exploratory_pat_df" in extra_sections and not extra_sections["exploratory_pat_df"].empty:
+            lines.extend([
+                "",
+                "### 4b. Bảng Test MAE & RMSE (°C) theo từng Pattern (`E1`, `E2` — `seeds 0, 1, 2`)",
+                "",
+            ])
+            lines.extend(_format_pattern_table(extra_sections["exploratory_pat_df"]))
+
+        if "exploratory_paired_df" in extra_sections and not extra_sections["exploratory_paired_df"].empty:
+            lines.extend([
+                "",
+                "### 4c. Hiệu số ghép cặp theo Seed của `E1` và `E2` so với `A0`, `A1`, `A3` (`seeds 0, 1, 2`)",
+                "",
+            ])
+            lines.extend(_format_paired_table(extra_sections["exploratory_paired_df"]))
+
+    lines.extend(["", "## 5. Báo cáo các cấu hình còn thiếu (Missing Configurations)", ""])
     if missing_df.empty:
         lines.append("Tất cả các cấu hình và seed trong danh sách kiểm tra đều đã có đủ trên đĩa.")
     else:
@@ -521,6 +601,23 @@ def write_comparison_markdown(
             lines.append(
                 f"| `{r['model'].upper()}` | **{r['code']}** | `{r['config_tag']}` | {r['description']} | "
                 f"`{r['status']}` | `{r['found_seeds']}` ({int(r['n_found'])}) | `{r['missing_seeds']}` ({int(r['n_missing'])}) |"
+            )
+
+    lines.extend([
+        "",
+        "## Phụ lục: Thời gian chạy (Chỉ tham khảo kỹ thuật — Không dùng để so sánh/kết luận)",
+        "",
+        "> **Lưu ý:** Thời gian chạy mỗi epoch (`Epoch time`), thời gian đạt ngưỡng (`Giây tới val_target`) và `Overhead PALF` phụ thuộc vào tải CPU tại thời điểm chạy cũng như sự khác biệt đường mã giữa `DataLoader(train)` chuẩn và `DataLoader(Subset(train, indices))`. Các số liệu này **không dùng để kết luận hiệu năng thuật toán**.",
+        "",
+    ])
+    if not summary_df.empty:
+        lines.append("| Backbone | Mã | Config Tag | Số seed | Giây tới `val_target` | Epoch time (s) | Overhead PALF (s) |")
+        lines.append("|---|---|---|---:|---:|---:|---:|")
+        for _, r in summary_df.iterrows():
+            t_str = f"{r['time_sec_to_target_mean']:.1f}s" if pd.notna(r["time_sec_to_target_mean"]) else "Chưa đạt"
+            lines.append(
+                f"| `{r['model'].upper()}` | **{r['code']}** | `{r['config_tag']}` | {int(r['n_seeds'])} ({r['seeds']}) | "
+                f"{t_str} | {r['mean_epoch_time_sec_mean']:.2f}s | {r['mean_overhead_sec_mean']:.4f}s |"
             )
 
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -560,8 +657,43 @@ def run_comparison_protocol(
     missing_df.to_csv(os.path.join(out_dir, "missing_configs.csv"), index=False)
 
     saved_figs = plot_comparison_figures(found_runs, pat_summary_df, val_targets, out_dir)
+
+    extra_sections: dict = {}
+    if len(seeds) >= 5 and set((0, 1, 2)).issubset(set(seeds)):
+        det_3 = detail_df[detail_df["seed"].isin([0, 1, 2])].copy()
+        sum_3, pair_3 = summarize_overall_and_paired(det_3)
+        extra_sections["summary_3seeds_df"] = sum_3
+        extra_sections["paired_3seeds_df"] = pair_3
+        sum_3.to_csv(os.path.join(out_dir, "summary_overall_3seeds.csv"), index=False)
+
+        det_4 = detail_df[detail_df["seed"].isin([1, 2, 3, 4])].copy()
+        sum_4, _ = summarize_overall_and_paired(det_4)
+        extra_sections["summary_4seeds_df"] = sum_4
+        sum_4.to_csv(os.path.join(out_dir, "summary_overall_seeds1234.csv"), index=False)
+
+    if config_specs is None:
+        exp_specs = [c for c in STANDARD_CONFIGS if c["code"] in ("A0", "A0r", "A1", "A3")] + EXPLORATORY_CONFIGS
+        exp_runs, _ = collect_protocol_runs(
+            baseline_root=baseline_root,
+            palf_root=palf_root,
+            models=models,
+            seeds=(0, 1, 2),
+            config_specs=exp_specs,
+            strict_validation=False,
+        )
+        has_e1_e2 = any(r["code"] in ("E1", "E2") for r in exp_runs)
+        if has_e1_e2:
+            exp_vt = compute_val_targets_from_a0(exp_runs)
+            exp_det, exp_pat = build_detail_and_pattern_tables(exp_runs, exp_vt)
+            exp_sum, exp_pair = summarize_overall_and_paired(exp_det)
+            exp_pat_sum = summarize_by_pattern(exp_pat)
+            extra_sections["exploratory_summary_df"] = exp_sum
+            extra_sections["exploratory_pat_df"] = exp_pat_sum[exp_pat_sum["code"].isin(["A0", "A1", "A3", "E1", "E2"])]
+            extra_sections["exploratory_paired_df"] = exp_pair[exp_pair["code"].isin(["E1", "E2"])]
+            exp_sum.to_csv(os.path.join(out_dir, "summary_exploratory_e1_e2.csv"), index=False)
+
     report_path = os.path.join(out_dir, "comparison_report.md")
-    write_comparison_markdown(summary_df, pat_summary_df, paired_df, missing_df, report_path)
+    write_comparison_markdown(summary_df, pat_summary_df, paired_df, missing_df, report_path, extra_sections=extra_sections)
 
     return {
         "found_runs": found_runs,

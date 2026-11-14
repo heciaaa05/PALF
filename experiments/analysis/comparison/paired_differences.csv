@@ -1,37 +1,37 @@
 model,code,ref_code,metric,n_paired_seeds,paired_seeds,diff_mean,diff_std,per_seed_diffs,stat_note
-gru,A0r,A0,mae_degC,3,"0,1,2",-0.01808170477549235,0.022828472957145077,s0:-0.0035; s1:-0.0444; s2:-0.0064,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A0r,A0,rmse_degC,3,"0,1,2",-0.018302967382006468,0.0272995525550467,s0:+0.0068; s1:-0.0474; s2:-0.0143,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A0r,A0,best_val_loss,3,"0,1,2",-0.0009727453192075325,0.0006991112770715681,s0:-0.0008; s1:-0.0004; s2:-0.0018,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A0r,A0,samples_to_target,3,"0,1,2",8165.0,60454.30260122103,s0:+58779.0000; s1:-58776.0000; s2:+24492.0000,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A0r,A0,time_sec_to_target,3,"0,1,2",115.52214646339417,60.930564975661056,s0:+166.4882; s1:+48.0346; s2:+132.0436,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A0r,A0,val_auc_samples,3,"0,1,2",-0.010676352671165576,0.0030721094691585544,s0:-0.0072; s1:-0.0118; s2:-0.0130,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A1,A0,mae_degC,3,"0,1,2",-0.013883431752522787,0.008996419616109514,s0:-0.0085; s1:-0.0243; s2:-0.0089,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A1,A0,rmse_degC,3,"0,1,2",-0.012493895672565683,0.006969927541622695,s0:-0.0045; s1:-0.0170; s2:-0.0160,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A1,A0,best_val_loss,3,"0,1,2",-0.00046224892139436663,0.0021186430158491995,s0:-0.0028; s1:+0.0014; s2:-0.0000,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A1,A0,samples_to_target,3,"0,1,2",48981.0,48981.0,s0:+97962.0000; s1:+48981.0000; s2:+0.0000,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A1,A0,time_sec_to_target,3,"0,1,2",172.93150679270425,73.9092015806794,s0:+233.0684; s1:+195.3058; s2:+90.4204,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A1,A0,val_auc_samples,3,"0,1,2",-0.0010788840637810104,0.0034989801367002788,s0:+0.0016; s1:+0.0002; s2:-0.0050,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A1,mae_degC,3,"0,1,2",-0.002943237622578939,0.01079484150509036,s0:-0.0030; s1:-0.0137; s2:+0.0079,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A1,rmse_degC,3,"0,1,2",-0.008297689662296381,0.022977958147471614,s0:-0.0084; s1:-0.0312; s2:+0.0147,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A1,best_val_loss,3,"0,1,2",-0.0011999035875002635,0.0008316781852713555,s0:-0.0012; s1:-0.0020; s2:-0.0003,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A1,samples_to_target,3,"0,1,2",0.0,0.0,s0:+0.0000; s1:+0.0000; s2:+0.0000,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A1,time_sec_to_target,3,"0,1,2",2.366124073664347,2.658665938311018,s0:-0.6867; s1:+3.6122; s2:+4.1729,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A1,val_auc_samples,3,"0,1,2",-0.0007341808971317217,0.0004494883063523264,s0:-0.0012; s1:-0.0004; s2:-0.0006,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A0,mae_degC,3,"0,1,2",-0.016826669375101726,0.019056218131271636,s0:-0.0114; s1:-0.0380; s2:-0.0010,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A0,rmse_degC,3,"0,1,2",-0.020791585334862066,0.02449080309228271,s0:-0.0129; s1:-0.0483; s2:-0.0012,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A0,best_val_loss,3,"0,1,2",-0.0016621525088946303,0.002036739159583282,s0:-0.0040; s1:-0.0006; s2:-0.0004,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A0,samples_to_target,3,"0,1,2",48981.0,48981.0,s0:+97962.0000; s1:+48981.0000; s2:+0.0000,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A0,time_sec_to_target,3,"0,1,2",175.29763086636862,71.8669247499563,s0:+232.3816; s1:+198.9181; s2:+94.5932,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3,A0,val_auc_samples,3,"0,1,2",-0.001813064960912732,0.00329712004332607,s0:+0.0003; s1:-0.0002; s2:-0.0056,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0r,mae_degC,3,"0,1,2",0.000962535540262858,0.004760596071093774,s0:-0.0001; s1:-0.0032; s2:+0.0062,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0r,rmse_degC,3,"0,1,2",-0.0015544082647852935,0.008555807154772607,s0:-0.0064; s1:-0.0066; s2:+0.0083,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0r,best_val_loss,3,"0,1,2",-0.000792553027470902,0.0011211421428394656,s0:-0.0020; s1:-0.0005; s2:+0.0001,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0r,samples_to_target,3,"0,1,2",-11429.0,19795.6086797047,s0:-34287.0000; s1:+0.0000; s2:+0.0000,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0r,time_sec_to_target,3,"0,1,2",-7.264042456944783,32.62921275211449,s0:-43.5654; s1:+2.1502; s2:+19.6231,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0r,val_auc_samples,3,"0,1,2",0.002133950077254194,0.001843790121020567,s0:+0.0002; s1:+0.0024; s2:+0.0038,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0,mae_degC,3,"0,1,2",-0.017119169235229492,0.02643867417066847,s0:-0.0036; s1:-0.0476; s2:-0.0002,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0,rmse_degC,3,"0,1,2",-0.01985737564679176,0.029736534135651374,s0:+0.0004; s1:-0.0540; s2:-0.0059,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0,best_val_loss,3,"0,1,2",-0.0017652983466784344,0.0009695802221100849,s0:-0.0028; s1:-0.0009; s2:-0.0016,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0,samples_to_target,3,"0,1,2",-3264.0,48074.80221488176,s0:+24492.0000; s1:-58776.0000; s2:+24492.0000,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0,time_sec_to_target,3,"0,1,2",108.25810400644939,52.30617061474161,s0:+122.9229; s1:+50.1848; s2:+151.6667,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
-gru,A3r,A0,val_auc_samples,3,"0,1,2",-0.008542402593911383,0.001317568670504314,s0:-0.0070; s1:-0.0094; s2:-0.0092,Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)
+gru,A0r,A0,mae_degC,5,"0,1,2,3,4",-0.01582674980163574,0.01644544441186596,s0:-0.0035; s1:-0.0444; s2:-0.0064; s3:-0.0133; s4:-0.0116,Du 5 seed ghep cap
+gru,A0r,A0,rmse_degC,5,"0,1,2,3,4",-0.011591285330977285,0.021580933446909315,s0:+0.0068; s1:-0.0474; s2:-0.0143; s3:+0.0026; s4:-0.0057,Du 5 seed ghep cap
+gru,A0r,A0,best_val_loss,5,"0,1,2,3,4",-0.0003907591104507807,0.0010159480942833392,s0:-0.0008; s1:-0.0004; s2:-0.0018; s3:+0.0010; s4:-0.0001,Du 5 seed ghep cap
+gru,A0r,A0,samples_to_target,5,"0,1,2,3,4",18614.4,25545.51379988275,s0:+9798.0000; s1:+9798.0000; s2:+24492.0000; s3:-9795.0000; s4:+58779.0000,Du 5 seed ghep cap
+gru,A0r,A0,time_sec_to_target,5,"0,1,2,3,4",124.11783986091613,43.54875423044581,s0:+113.2569; s1:+158.8617; s2:+132.0436; s3:+54.8648; s4:+161.5622,Du 5 seed ghep cap
+gru,A0r,A0,val_auc_samples,5,"0,1,2,3,4",-0.014665990066339918,0.006077784250282853,s0:-0.0072; s1:-0.0118; s2:-0.0130; s3:-0.0228; s4:-0.0185,Du 5 seed ghep cap
+gru,A1,A0,mae_degC,5,"0,1,2,3,4",-0.021802282333374022,0.013113079716110433,s0:-0.0085; s1:-0.0243; s2:-0.0089; s3:-0.0284; s4:-0.0390,Du 5 seed ghep cap
+gru,A1,A0,rmse_degC,5,"0,1,2,3,4",-0.012573914671570652,0.0055190643758606045,s0:-0.0045; s1:-0.0170; s2:-0.0160; s3:-0.0162; s4:-0.0092,Du 5 seed ghep cap
+gru,A1,A0,best_val_loss,5,"0,1,2,3,4",0.00016574561595915916,0.0017328439267954778,s0:-0.0028; s1:+0.0014; s2:-0.0000; s3:+0.0009; s4:+0.0013,Du 5 seed ghep cap
+gru,A1,A0,samples_to_target,5,"0,1,2,3,4",39184.8,21904.96912118344,s0:+48981.0000; s1:+48981.0000; s2:+0.0000; s3:+48981.0000; s4:+48981.0000,Du 5 seed ghep cap
+gru,A1,A0,time_sec_to_target,5,"0,1,2,3,4",148.80602645874023,41.03042579153215,s0:+179.8370; s1:+195.3058; s2:+90.4204; s3:+136.3461; s4:+142.1209,Du 5 seed ghep cap
+gru,A1,A0,val_auc_samples,5,"0,1,2,3,4",-0.007995719079827452,0.009920369193376147,s0:+0.0016; s1:+0.0002; s2:-0.0050; s3:-0.0206; s4:-0.0161,Du 5 seed ghep cap
+gru,A3,A1,mae_degC,5,"0,1,2,3,4",0.0063220739364624025,0.014816999173257205,s0:-0.0030; s1:-0.0137; s2:+0.0079; s3:+0.0194; s4:+0.0210,Du 5 seed ghep cap
+gru,A3,A1,rmse_degC,5,"0,1,2,3,4",-0.0012303389395057706,0.02189477861591875,s0:-0.0084; s1:-0.0312; s2:+0.0147; s3:+0.0250; s4:-0.0062,Du 5 seed ghep cap
+gru,A3,A1,best_val_loss,5,"0,1,2,3,4",-0.0010199233889579967,0.0009819953138737153,s0:-0.0012; s1:-0.0020; s2:-0.0003; s3:+0.0003; s4:-0.0018,Du 5 seed ghep cap
+gru,A3,A1,samples_to_target,5,"0,1,2,3,4",0.0,0.0,s0:+0.0000; s1:+0.0000; s2:+0.0000; s3:+0.0000; s4:+0.0000,Du 5 seed ghep cap
+gru,A3,A1,time_sec_to_target,5,"0,1,2,3,4",3.741275358200073,2.6631989176516053,s0:-0.6867; s1:+3.6122; s2:+4.1729; s3:+5.6448; s4:+5.9632,Du 5 seed ghep cap
+gru,A3,A1,val_auc_samples,5,"0,1,2,3,4",-0.0008295528479348585,0.0003735735446935218,s0:-0.0012; s1:-0.0004; s2:-0.0006; s3:-0.0008; s4:-0.0012,Du 5 seed ghep cap
+gru,A3,A0,mae_degC,5,"0,1,2,3,4",-0.01548020839691162,0.013963837474725682,s0:-0.0114; s1:-0.0380; s2:-0.0010; s3:-0.0090; s4:-0.0179,Du 5 seed ghep cap
+gru,A3,A0,rmse_degC,5,"0,1,2,3,4",-0.013804253611076423,0.021554049078159748,s0:-0.0129; s1:-0.0483; s2:-0.0012; s3:+0.0088; s4:-0.0154,Du 5 seed ghep cap
+gru,A3,A0,best_val_loss,5,"0,1,2,3,4",-0.0008541777729988376,0.0019155140946224179,s0:-0.0040; s1:-0.0006; s2:-0.0004; s3:+0.0012; s4:-0.0005,Du 5 seed ghep cap
+gru,A3,A0,samples_to_target,5,"0,1,2,3,4",39184.8,21904.96912118344,s0:+48981.0000; s1:+48981.0000; s2:+0.0000; s3:+48981.0000; s4:+48981.0000,Du 5 seed ghep cap
+gru,A3,A0,time_sec_to_target,5,"0,1,2,3,4",152.54730181694032,39.83717697499119,s0:+179.1503; s1:+198.9181; s2:+94.5932; s3:+141.9908; s4:+148.0841,Du 5 seed ghep cap
+gru,A3,A0,val_auc_samples,5,"0,1,2,3,4",-0.00882527192776231,0.009988422033193426,s0:+0.0003; s1:-0.0002; s2:-0.0056; s3:-0.0214; s4:-0.0173,Du 5 seed ghep cap
+gru,A3r,A0r,mae_degC,5,"0,1,2,3,4",0.002072048187255859,0.004252995998363966,s0:-0.0001; s1:-0.0032; s2:+0.0062; s3:+0.0008; s4:+0.0067,Du 5 seed ghep cap
+gru,A3r,A0r,rmse_degC,5,"0,1,2,3,4",-0.0007759594286786076,0.006171236313609315,s0:-0.0064; s1:-0.0066; s2:+0.0083; s3:-0.0004; s4:+0.0012,Du 5 seed ghep cap
+gru,A3r,A0r,best_val_loss,5,"0,1,2,3,4",-0.0006636425852775407,0.0009259516811974022,s0:-0.0020; s1:-0.0005; s2:+0.0001; s3:-0.0011; s4:+0.0002,Du 5 seed ghep cap
+gru,A3r,A0r,samples_to_target,5,"0,1,2,3,4",-13714.8,18779.76332917963,s0:-34287.0000; s1:-34287.0000; s2:+0.0000; s3:+0.0000; s4:+0.0000,Du 5 seed ghep cap
+gru,A3r,A0r,time_sec_to_target,5,"0,1,2,3,4",-10.634255981445312,33.56872916665394,s0:-43.5654; s1:-50.3570; s2:+19.6231; s3:+14.4910; s4:+6.6371,Du 5 seed ghep cap
+gru,A3r,A0r,val_auc_samples,5,"0,1,2,3,4",0.001301975525573068,0.0017341944512374026,s0:+0.0002; s1:+0.0024; s2:+0.0038; s3:-0.0001; s4:+0.0002,Du 5 seed ghep cap
+gru,A3r,A0,mae_degC,5,"0,1,2,3,4",-0.013754701614379883,0.01944261367875812,s0:-0.0036; s1:-0.0476; s2:-0.0002; s3:-0.0125; s4:-0.0049,Du 5 seed ghep cap
+gru,A3r,A0,rmse_degC,5,"0,1,2,3,4",-0.012367244759655893,0.02351270128504638,s0:+0.0004; s1:-0.0540; s2:-0.0059; s3:+0.0022; s4:-0.0045,Du 5 seed ghep cap
+gru,A3r,A0,best_val_loss,5,"0,1,2,3,4",-0.0010544016957283215,0.0011918587810345598,s0:-0.0028; s1:-0.0009; s2:-0.0016; s3:-0.0001; s4:+0.0001,Du 5 seed ghep cap
+gru,A3r,A0,samples_to_target,5,"0,1,2,3,4",4899.6,36159.93214595404,s0:-24489.0000; s1:-24489.0000; s2:+24492.0000; s3:-9795.0000; s4:+58779.0000,Du 5 seed ghep cap
+gru,A3r,A0,time_sec_to_target,5,"0,1,2,3,4",113.48358387947083,45.66604219758684,s0:+69.6916; s1:+108.5047; s2:+151.6667; s3:+69.3557; s4:+168.1992,Du 5 seed ghep cap
+gru,A3r,A0,val_auc_samples,5,"0,1,2,3,4",-0.01336401454076685,0.006866496431675341,s0:-0.0070; s1:-0.0094; s2:-0.0092; s3:-0.0229; s4:-0.0183,Du 5 seed ghep cap

@@ -41,9 +41,9 @@ class PalfConfig:
     min_floor_frac: float = 0.05 # ty le san 5% * pi_p * n_e (Muc 6)
 
     def __post_init__(self):
-        if self.policy not in ("predictive", "state", "loss", "uniform"):
+        if self.policy not in ("predictive", "state", "loss", "loss_abs", "uniform"):
             raise ValueError(
-                f"policy='{self.policy}' khong hop le. Chon: 'predictive', 'state', 'loss', 'uniform'."
+                f"policy='{self.policy}' khong hop le. Chon: 'predictive', 'state', 'loss', 'loss_abs', 'uniform'."
             )
         if not (0.0 < self.budget_ratio <= 1.0):
             raise ValueError(f"budget_ratio={self.budget_ratio} phai nam trong (0, 1].")

@@ -41,8 +41,8 @@ def parse_args(argv=None):
     parser.add_argument(
         "--seeds",
         type=str,
-        default="0,1,2",
-        help="Danh sach seed cach nhau boi dau phay (mac dinh: 0,1,2 theo Prompt 7 Phan 5.2).",
+        default="0,1,2,3,4",
+        help="Danh sach seed cach nhau boi dau phay (mac dinh: 0,1,2,3,4 theo Prompt 8 Muc 8.3).",
     )
     return parser.parse_args(argv)
 

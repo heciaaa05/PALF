@@ -12,6 +12,14 @@ def _calc_loss_ratio(history: List[dict], window: int) -> float:
     return float(cur) if not np.isnan(cur) else float("nan")
 
 
+def _calc_loss_abs(history: List[dict], window: int) -> float:
+    """Loss tuyet doi cua Pattern chia cho loss trung binh toan bo o epoch do (Prompt 8.4 E2)."""
+    if not history:
+        return float("nan")
+    cur = history[-1].get("loss_abs", np.nan)
+    return float(cur) if not np.isnan(cur) else float("nan")
+
+
 def _calc_velocity(history: List[dict], window: int) -> float:
     """Toc do giam loss chuan hoa trong cua so W: (l_tilde(e-W) - l_tilde(e)) / W.
     Neu chua du lich su (< 2 diem hop le hoac diem hien tai la NaN) thi tra ve NaN."""
@@ -69,6 +77,7 @@ def _calc_grad_norm(history: List[dict], window: int) -> float:
 
 BUILTIN_STATE_FUNCTIONS: Dict[str, Callable[[List[dict], int], float]] = {
     "loss_ratio": _calc_loss_ratio,
+    "loss_abs": _calc_loss_abs,
     "velocity": _calc_velocity,
     "instability": _calc_instability,
     "within_dispersion": _calc_within_dispersion,
@@ -114,6 +123,26 @@ class LearningStateTracker:
         state_out = {}
         window = int(self.cfg.window)
 
+        # Tinh loss trung binh toan bo o epoch hien tai (co trong so theo n_seen) de chuan hoa loss_abs
+        total_weighted_loss = 0.0
+        total_n_seen = 0
+        finite_losses = []
+        for p in self.pattern_names:
+            p_stat = stats.get(p, {})
+            if isinstance(p_stat, dict):
+                ns = int(p_stat.get("n_seen", 0)) if p_stat.get("n_seen") is not None else 0
+                lm = float(p_stat.get("loss_mean", np.nan)) if ns > 0 else float("nan")
+                if not np.isnan(lm) and lm >= 0.0:
+                    total_weighted_loss += ns * lm
+                    total_n_seen += ns
+                    finite_losses.append(lm)
+        if total_n_seen > 0 and total_weighted_loss > 0.0:
+            global_loss_mean = float(total_weighted_loss / total_n_seen)
+        elif finite_losses and np.mean(finite_losses) > 0.0:
+            global_loss_mean = float(np.mean(finite_losses))
+        else:
+            global_loss_mean = float("nan")
+
         for p in self.pattern_names:
             p_stat = stats.get(p, {})
             if not isinstance(p_stat, dict):
@@ -138,6 +167,11 @@ class LearningStateTracker:
             else:
                 loss_ratio = float("nan")
 
+            if not np.isnan(loss_mean) and not np.isnan(global_loss_mean) and global_loss_mean > 0:
+                loss_abs = float(loss_mean / global_loss_mean)
+            else:
+                loss_abs = float("nan")
+
             rec = {
                 "epoch": int(epoch),
                 "n_seen": n_seen,
@@ -145,11 +179,13 @@ class LearningStateTracker:
                 "loss_std": loss_std,
                 "grad_norm": grad_norm,
                 "loss_ratio": loss_ratio,
+                "loss_abs": loss_abs,
             }
             self.history[p].append(rec)
 
             p_state = {}
-            for var_name in self.cfg.state_vars:
+            vars_to_compute = list(dict.fromkeys(list(self.cfg.state_vars) + ["loss_abs"]))
+            for var_name in vars_to_compute:
                 if var_name not in self._registry:
                     raise KeyError(
                         f"Bien Learning State '{var_name}' chua duoc dang ky. "

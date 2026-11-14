@@ -8,6 +8,9 @@ data/raw/
 experiments/checkpoints/
 experiments/logs/
 experiments/results/baseline/
+experiments/results/smoke/
 *.npy
-baseline_*_jena.zip
+*.zip
+cartography.csv
+**/cartography.csv
 *.pt

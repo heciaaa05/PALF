@@ -7,8 +7,8 @@ Tài liệu này ghi nhận kết quả thực nghiệm chọn siêu tham số `
 ## 1. Thiết lập Thực nghiệm Tinh chỉnh
 
 - **Backbone:** `GRU` (`seed = 0`, `30 epoch`, `batch = 128`, `lr = 1e-3`, `device = cpu`).
-- **Tập dữ liệu:** Jena Climate đầy đủ (`n_train = 48,981`, `n_val = 10,492`).
-- **Chính sách:** `policy = "predictive"`, `budget_ratio = 1.0`, `warmup_epochs = 3`, `update_every = 1`, `ema_beta = 0.5`, `w_min = 0.25`.
+- **Tập dữ liệu:** Jena Climate đầy đủ (`n_train = 48,981`, `n_val = 10,377`, `n_test = 10,377`).
+- **Chính sách:** `policy = "predictive"` (**không đạt ngưỡng G3 toàn cục 4 backbone**; dùng hệ số hồi quy ước lượng trên `seeds 3, 4` của GRU), `budget_ratio = 1.0`, `warmup_epochs = 3`, `update_every = 1`, `ema_beta = 0.5`, `w_min = 0.25`.
 - **Tệp hệ số hồi quy ngoài mẫu:** `experiments/analysis/phase3_real/predictive_coef_gru_seeds34.json` (được ước lượng độc lập trên `seeds 3, 4` của GRU, không chạm vào `seeds 0, 1, 2`).
 - **Không gian lưới `(alpha, w_max)` khảo sát (4 cấu hình theo Prompt 7 Phần 5.1):**
   1. `pred_a0.5_w2`: `(alpha = 0.5, w_max = 2.0)`
