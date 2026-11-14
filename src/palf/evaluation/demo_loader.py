@@ -241,6 +241,14 @@ def summarize_palf_diagnostics(run_dict: Optional[dict]) -> dict:
 
     weights_pivot = pol_df.pivot(index="epoch", columns="pattern", values="weight")
 
+    if "quota_planned" in pol_df.columns and (pol_df["quota_planned"] > 0).any():
+        q_tot = pol_df.groupby("epoch")["quota_planned"].transform("sum").replace(0, np.nan)
+        tmp_q = pol_df.copy()
+        tmp_q["quota_share"] = tmp_q["quota_planned"] / q_tot
+        quota_share_pivot = tmp_q.pivot(index="epoch", columns="pattern", values="quota_share")
+    else:
+        quota_share_pivot = pd.DataFrame()
+
     if not pat_df.empty and "actual_share" in pat_df.columns:
         share_pivot = pat_df.pivot(index="epoch", columns="pattern", values="actual_share")
     elif "n_seen" in pol_df.columns:
@@ -252,14 +260,58 @@ def summarize_palf_diagnostics(run_dict: Optional[dict]) -> dict:
         share_pivot = pd.DataFrame()
 
     state_pivots = {}
-    for var_col in ("loss_ratio", "velocity", "instability", "need_score"):
-        if var_col in pol_df.columns:
+    for var_col in ("loss_ratio", "velocity", "instability", "y_hat", "need_score"):
+        if var_col in pol_df.columns and pol_df[var_col].notna().any():
             state_pivots[var_col] = pol_df.pivot(index="epoch", columns="pattern", values=var_col)
 
     return {
         "has_palf": True,
         "message": "OK",
         "weights_pivot": weights_pivot,
+        "quota_share_pivot": quota_share_pivot,
         "share_pivot": share_pivot,
         "state_pivots": state_pivots,
     }
+
+
+def summarize_pattern_mae_across_seeds(saved_runs: List[dict], model_filter: Optional[str] = None) -> pd.DataFrame:
+    """Tong hop bang MAE va RMSE (°C) theo Pattern kem do lech chuan giua cac seed (Mean ± Std)
+    cho tung (Model, Config) — phuc vu Man hinh 3 trong Prompt 7 Phan 3.1."""
+    rows = []
+    for r in saved_runs:
+        if model_filter and model_filter != "Tất cả" and r["model"].upper() != model_filter.upper():
+            continue
+        tm = r.get("test_metrics", {})
+        for bp in tm.get("by_pattern", []):
+            rows.append({
+                "Model": r["model"].upper(),
+                "Config": r["config_tag"],
+                "Seed": int(r["seed"]),
+                "Pattern": bp["pattern"],
+                "n_test": int(bp.get("n", 0)),
+                "mae_degC": float(bp.get("mae_degC", np.nan)),
+                "rmse_degC": float(bp.get("rmse_degC", np.nan)),
+            })
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    out_rows = []
+    for (m, cfg, pat), grp in df.groupby(["Model", "Config", "Pattern"], sort=False):
+        n_s = len(grp)
+        m_mean = float(grp["mae_degC"].mean())
+        m_std = float(grp["mae_degC"].std(ddof=1)) if n_s > 1 else 0.0
+        r_mean = float(grp["rmse_degC"].mean())
+        r_std = float(grp["rmse_degC"].std(ddof=1)) if n_s > 1 else 0.0
+        out_rows.append({
+            "Backbone": m,
+            "Cấu hình": cfg,
+            "Pattern": pat,
+            "Số seed": n_s,
+            "Số mẫu test": int(grp["n_test"].iloc[0]),
+            "MAE (°C) Mean": round(m_mean, 4),
+            "MAE (°C) Std": round(m_std, 4),
+            "MAE (°C) (Mean ± Std)": f"{m_mean:.4f} ± {m_std:.4f}",
+            "RMSE (°C) (Mean ± Std)": f"{r_mean:.4f} ± {r_std:.4f}",
+        })
+    return pd.DataFrame(out_rows)

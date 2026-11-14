@@ -1,4 +1,5 @@
-"""Adaptive Scheduler: phan bo han ngach va lay mau khong lap theo Pattern cho moi epoch."""
+"""Adaptive Scheduler (Spec v1 Muc 6): phan bo han ngach theo q_p (khong chan o N_p)
+va lay mau co lap khi n_p > N_p de tang ty trong Pattern duoc uu tien."""
 from typing import Dict
 import numpy as np
 
@@ -37,11 +38,11 @@ class AdaptiveScheduler:
         return {p: 1.0 for p in self.pattern_names}
 
     def compute_quotas(self, weights: Dict[str, float]) -> Dict[str, int]:
-        """Tinh han ngach n_p cho tung Pattern thoa:
+        """Tinh han ngach n_p cho tung Pattern theo Spec v1 Muc 6:
         - Tong sum(n_p) == n_e = round(budget_ratio * n_train)
-        - San: n_p >= floor_p
-        - Tran: n_p <= N_p
-        - Phan du sau cat san/tran duoc chia lai theo ty le q_p."""
+        - Khi moi w_p bang nhau va n_e == n_train => n_p == N_p
+        - Khong chan tran o N_p (cho phep n_p > N_p khi w_p cao)
+        - San: n_p >= floor_p; phan chenh lech duoc chia lai theo ty le q_p."""
         if self.n_train == 0:
             return {p: 0 for p in self.pattern_names}
 
@@ -52,21 +53,18 @@ class AdaptiveScheduler:
         if not active_pats:
             return {p: 0 for p in self.pattern_names}
 
-        # Neu n_e == n_train, moi Pattern bat buoc lay du N_p (khong the vuot tran N_p)
-        if n_e == self.n_train:
+        w_vals = np.array([max(0.0, float(weights.get(p, 1.0))) for p in active_pats], dtype=float)
+        # Neu moi w_p bang nhau va n_e == n_train, moi Pattern lay dung N_p mau (toan bo train dung 1 lan)
+        if n_e == self.n_train and np.allclose(w_vals, w_vals[0], atol=1e-12):
             return {p: self.pattern_counts[p] for p in self.pattern_names}
 
         # 1. Tinh ty le muc tieu q_p ~ w_p * pi_p
-        raw_q = np.array(
-            [max(0.0, float(weights.get(p, 1.0))) * self.freqs[p] for p in active_pats],
-            dtype=float,
-        )
+        raw_q = np.array([w_vals[i] * self.freqs[p] for i, p in enumerate(active_pats)], dtype=float)
         if raw_q.sum() <= 0:
             raw_q = np.array([self.freqs[p] for p in active_pats], dtype=float)
         q = raw_q / raw_q.sum()
 
-        # 2. Tinh san floor_p va tran cap_p = N_p
-        caps = np.array([self.pattern_counts[p] for p in active_pats], dtype=int)
+        # 2. Tinh san floor_p (khong chan tran o N_p theo Spec v1 Muc 6)
         floors = np.array(
             [
                 min(
@@ -80,41 +78,35 @@ class AdaptiveScheduler:
             ],
             dtype=int,
         )
-        # Neu tong san vuot n_e (chi xay ra khi tap du lieu thu nghiem rat nho), co dan san theo ty le
         if floors.sum() > n_e:
             scaled = np.floor(floors * (n_e / floors.sum())).astype(int)
-            floors = np.minimum(caps, np.maximum(0, scaled))
+            floors = np.maximum(0, scaled)
 
-        # 3. Khoi tao han ngach va cat theo [floors, caps]
-        quotas = np.round(n_e * q).astype(int)
-        quotas = np.clip(quotas, floors, caps)
+        # 3. Khoi tao han ngach exact va ap san
+        exact_n = n_e * q
+        quotas = np.floor(exact_n).astype(int)
+        rem_init = int(n_e - quotas.sum())
+        if rem_init > 0:
+            order = np.argsort(-(exact_n - quotas))
+            for idx_o in order[:rem_init]:
+                quotas[idx_o] += 1
 
-        # 4. Chia lai phan chenh lech cho cac Pattern con cho theo ty le q_p
+        quotas = np.maximum(quotas, floors)
+
+        # 4. Chia lai phan chenh lech sau khi nang san (lay tu cac Pattern con tren san theo ty le q_p)
         for _ in range(len(active_pats) + 4):
             diff = int(n_e - quotas.sum())
             if diff == 0:
                 break
             if diff > 0:
-                avail = caps - quotas
-                elig = avail > 0
-                if not elig.any():
-                    break
-                w_elig = q[elig]
-                w_elig = w_elig / w_elig.sum() if w_elig.sum() > 0 else np.ones(elig.sum()) / elig.sum()
-                exact_add = diff * w_elig
+                exact_add = diff * q
                 int_add = np.floor(exact_add).astype(int)
                 rem = int(diff - int_add.sum())
                 if rem > 0:
                     order = np.argsort(-(exact_add - int_add))
                     for idx_o in order[:rem]:
                         int_add[idx_o] += 1
-                int_add = np.minimum(avail[elig], int_add)
-                if int_add.sum() == 0:
-                    # Fallback: cong 1 cho pattern co q lon nhat con cho
-                    best_i = np.where(elig)[0][np.argmax(q[elig])]
-                    quotas[best_i] += 1
-                else:
-                    quotas[elig] += int_add
+                quotas += int_add
             else:
                 need_sub = int(-diff)
                 room = quotas - floors
@@ -144,7 +136,8 @@ class AdaptiveScheduler:
 
     def plan_epoch(self, epoch: int, decision=None) -> np.ndarray:
         """Chi so (vi tri trong train dataset) se huan luyen o epoch nay, da xao tron.
-        decision=None => lay mau deu."""
+        - Neu n_p <= N_p: chon ngau nhien khong lap n_p mau.
+        - Neu n_p > N_p: lay toan bo N_p mau 1 lan roi chon them (n_p - N_p) mau co lap."""
         rng = np.random.default_rng([self.seed, int(epoch)])
         weights = self._extract_weights(decision)
         quotas = self.compute_quotas(weights)
@@ -156,10 +149,17 @@ class AdaptiveScheduler:
             if n_p <= 0:
                 continue
             pool = self.pattern_indices[p]
-            if n_p >= len(pool):
+            n_pool = len(pool)
+            if n_pool == 0:
+                continue
+            if n_p == n_pool:
                 sel = rng.permutation(pool)
-            else:
+            elif n_p < n_pool:
                 sel = rng.choice(pool, size=n_p, replace=False)
+            else:
+                base_pass = rng.permutation(pool)
+                extra = rng.choice(pool, size=n_p - n_pool, replace=True)
+                sel = np.concatenate([base_pass, extra])
             chosen_parts.append(sel)
 
         if not chosen_parts:

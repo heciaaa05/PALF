@@ -14,6 +14,7 @@ import pandas as pd
 
 from palf.evaluation.phase3_analysis import (
     discover_run_dirs,
+    run_g3_followup_analysis,
     run_phase3_analysis,
 )
 
@@ -23,8 +24,12 @@ def parse_args(argv=None):
         description="Cong cu phan tich Phase 3 (Learning State Investigation) - ho tro reduced & full mode."
     )
     parser.add_argument(
-        "--in-dir", type=str, default="experiments/results/baseline/jena/gru",
+        "--in-dir", "--results-root", dest="in_dir", type=str, default="experiments/results/baseline/jena",
         help="Thu muc log dau vao (co the la 1 run, 1 backbone co seed0..k, hoac thu muc goc chua nhieu backbone)."
+    )
+    parser.add_argument(
+        "--g3-followup", action="store_true",
+        help="Chay kiem tra G3 Follow-up (kiem soat epoch, loc nhieu, mean-reversion) va xuat predictive_coef.json + g3_followup.md."
     )
     parser.add_argument(
         "--in-dirs", nargs="+", default=None,
@@ -53,6 +58,19 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    if args.g3_followup:
+        res_g3 = run_g3_followup_analysis(
+            in_path=args.in_dir,
+            out_dir=args.out_dir,
+            W=3,
+            k=args.k,
+        )
+        print(
+            f"[G3 Follow-up] DONE | verdict='{res_g3['verdict']}' | report={res_g3['report_path']}",
+            flush=True,
+        )
+        return res_g3
+
     targets = args.in_dirs if args.in_dirs is not None else [args.in_dir]
 
     if len(targets) == 1:

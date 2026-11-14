@@ -182,6 +182,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
                     "epoch": int(epoch),
                     "pattern": str(p_name),
                     "weight": float(current_decision.weights.get(p_name, 1.0)),
+                    "y_hat": float(current_decision.info.get("y_hat", {}).get(p_name, np.nan)),
                     "need_score": float(current_decision.info["need_score"].get(p_name, 0.0)),
                     "n_seen": int(train_stats.get(p_name, {}).get("n_seen", 0)),
                     "quota_planned": int(scheduler.last_quotas.get(p_name, 0)),
@@ -323,6 +324,11 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
     run_config = {
         "mode": str(mode),
         "palf_config": cfg.to_dict() if cfg is not None else None,
+        "predictive_coef": (
+            policy_engine.predictive_coef
+            if (mode == "palf" and policy_engine is not None and policy_engine.predictive_coef is not None)
+            else None
+        ),
         "config_tag": cfg.config_tag() if cfg is not None else "baseline",
         "model": canonical_model.lower(),
         "model_name": canonical_model,

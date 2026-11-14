@@ -20,16 +20,18 @@
       "velocity": 1.0,
       "instability": 0.5
     },
+    "predictive_coef_path": "experiments/analysis/phase3_real/predictive_coef.json",
     "z_clip": 3.0,
     "min_floor_samples": 32,
     "min_floor_frac": 0.05
   },
+  "predictive_coef": null,
   "config_tag": "uniform_b0.7",
   "model": "gru",
   "model_name": "GRU",
   "seed": 2,
-  "epochs": 10,
-  "epochs_run": 10,
+  "epochs": 30,
+  "epochs_run": 30,
   "patience": null,
   "stopped_early": false,
   "batch": 128,
@@ -47,10 +49,10 @@
   "input_len": 96,
   "horizon": 24,
   "input_dim": 14,
-  "n_train": 2048,
-  "n_val": 512,
-  "n_test": 512,
+  "n_train": 48981,
+  "n_val": 10377,
+  "n_test": 10377,
   "params": 41880,
-  "save_sample_losses": true,
-  "git_commit": "da6a5894165e5623aab1f7415b2c6bad0699fcdc"
+  "save_sample_losses": false,
+  "git_commit": "7ead52e585345b72d22c567d04a88457152471f5"
 }

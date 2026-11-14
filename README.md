@@ -62,19 +62,19 @@ flowchart LR
      - `velocity`: $(\tilde{\ell}_p(e-W) - \tilde{\ell}_p(e)) / W$ (tốc độ giảm lỗi trong cửa sổ $W$ epoch).
      - `instability`: $\text{std}(\tilde{\ell}_p(e-W+1 \dots e))$ (độ dao động của đường cong lỗi trong cửa sổ $W$).
 
-5. **Phase 5 — Policy Engine (`src/palf/core/policy.py`)**:
-   - Hỗ trợ 3 chế độ chính sách để đối chứng công bằng:
+5. **Phase 5 — Policy Engine (`src/palf/core/policy.py`, Spec v1)**:
+   - Hỗ trợ các chế độ chính sách để đối chứng công bằng:
      - `uniform`: Mọi $w_p = 1.0$ (baseline đi qua Scheduler).
-     - `loss`: Điểm ưu tiên chỉ dùng $z(\text{loss\_ratio})$ (đối chứng thích nghi đơn giản B2).
-     - `state` (PALF): Kết hợp đa biến $N_p(e) = \sum_k s_k \cdot z_k(p, e)$ với dấu $s_k$ được xác nhận từ hồi quy Phase 3 (`loss_ratio: +1.0, velocity: +1.0, instability: +0.5`).
-   - Chuyển điểm thành trọng số có cắt ngưỡng $[w_{\min}, w_{\max}]$ và làm mượt EMA theo thời gian:
-     $$w_{\text{new}, p} = \text{clip}(1 + \alpha \cdot N_p(e),\; w_{\min},\; w_{\max}), \quad w_p(e) = \beta\, w_p(e-1) + (1-\beta)\, w_{\text{new}, p}$$
+     - `loss`: Điểm ưu tiên chỉ dùng $z(\text{loss\_ratio})$ (đối chứng thích nghi đơn giản B2 — `A1`).
+     - `predictive` (**PALF v1 — `A3` / `A3r`**): Dự báo độ giảm loss chuẩn hóa $\hat{y}_p = \text{intercept} + \sum_k \text{coef}_k \cdot x_{k,p}^{\text{std}}$ từ hệ số hồi quy tuyến tính đa biến ước lượng ngoài mẫu (`predictive_coef_gru_seeds34.json`), đặt $\text{raw\_need}_p = -\hat{y}_p$, chuẩn hóa z-score giữa các pattern $s_p(e) = z(\text{raw\_need}_p)$ và biến đổi hàm mũ sang trọng số:
+       $$w_{\text{new}, p} = \text{clip}\!\left(\exp(\alpha \cdot s_p(e)),\; w_{\min},\; w_{\max}\right), \quad w_p(e) = \beta\, w_p(e-1) + (1-\beta)\, w_{\text{new}, p}$$
 
-6. **Phase 6 — Adaptive Scheduler (`src/palf/training/scheduler.py`)**:
+6. **Phase 6 — Adaptive Scheduler (`src/palf/training/scheduler.py`, Spec v1)**:
    - Với ngân sách $n_e = \text{round}(\rho \cdot n_{\text{train}})$ mẫu mỗi epoch:
      - Tính tỷ lệ mục tiêu $q_p \propto w_p \cdot \pi_p$ (với $\pi_p = N_p / n_{\text{train}}$).
-     - Phân bổ hạn ngạch $n_p = \min(N_p, \text{round}(n_e \cdot q_p))$, bảo đảm sàn tối thiểu $n_{\text{floor}} = \min(N_p, \max(32, \text{round}(0.05 \cdot \pi_p \cdot n_e)))$ để không Pattern hiếm nào bị mất tín hiệu, và chia lại phần dư để $\sum_p n_p = n_e$.
-     - Lấy mẫu ngẫu nhiên **không lặp** trong từng Pattern rồi gộp và xáo trộn toàn cục.
+     - Bảo đảm sàn tối thiểu $n_{\text{floor}} = \min(N_p, \max(32, \text{round}(0.05 \cdot \pi_p \cdot n_e)))$ để không Pattern hiếm nào bị mất tín hiệu, và phân bổ phần dư lớn nhất trên toàn bộ các nhóm có $N_p > 0$ (không cắt trần ở $N_p$) để $\sum_p n_p = n_e$.
+     - Khi $n_p \le N_p$: lấy ngẫu nhiên $n_p$ mẫu **không hoàn lại**.
+     - Khi $n_p > N_p$ (nhóm khó được tăng trọng số $w_p > 1$): lấy toàn bộ $N_p$ mẫu gốc đúng 1 lần cộng thêm $n_p - N_p$ mẫu lấy **có hoàn lại**, sau đó gộp và xáo trộn toàn cục.
 
 ---
 
@@ -128,16 +128,30 @@ PALF/
 │   │   └── compare_runs.py             # Bộ tổng hợp giao thức so sánh công bằng Mục 7
 │   ├── models/                         # Định nghĩa 4 mô hình: GRU, TCN, Transformer, PatchTST
 │   └── training/
-│       ├── scheduler.py                # AdaptiveScheduler (phân bổ hạn ngạch & lấy mẫu không lặp)
+│       ├── scheduler.py                # AdaptiveScheduler v1 (hỗ trợ lặp mẫu có hoàn lại khi n_p > N_p)
 │       └── trainer.py                  # Vòng lặp huấn luyện hợp nhất (mode="baseline" | "palf")
-└── tests/                              # 67 bài kiểm thử tự động (pytest)
+└── tests/                              # 77 bài kiểm thử tự động (pytest)
 ```
 
 ---
 
-## 5. Hướng dẫn cài đặt & Sử dụng nhanh (PowerShell)
+## 5. Kết quả Thực nghiệm 30 Epoch trên Tập Jena Climate (`GRU`, `seeds 0, 1, 2`)
 
-### 5.1. Cài đặt môi trường
+Bảng tổng hợp từ [`experiments/analysis/comparison/comparison_report.md`](file:///d:/Github/PALF/experiments/analysis/comparison/comparison_report.md) (`n_train = 48,981`, `n_val = 10,492`, `n_test = 10,493`, `30 epoch`, `batch = 128`, `lr = 1e-3`):
+
+| Mã | Cấu hình (`config_tag`) | Số seed | Test MAE (°C) ↓ | Test RMSE (°C) ↓ | Best Val Loss ↓ | Mẫu tới `val_target` ↓ | MAE `pressure_drop` (°C) ↓ | MAE `temp_anomaly_cold` (°C) ↓ |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`A0`** | `baseline` (`uniform, b=1.0`) | `3 (0,1,2)` | `1.7872 ± 0.0335` | `2.3517 ± 0.0411` | `0.0818 ± 0.0003` | `163,270` | `1.7411 ± 0.0599` | `2.5131 ± 0.2079` |
+| **`A0r`** | `uniform_b0.7` (`uniform, b=0.7`) | `3 (0,1,2)` | **`1.7692 ± 0.0111`** | `2.3334 ± 0.0173` | `0.0808 ± 0.0005` | `171,435` | `1.7006 ± 0.0399` | `2.5354 ± 0.1950` |
+| **`A1`** | `loss_b1.0_a1.0` (`loss_only, b=1.0`) | `3 (0,1,2)` | `1.7734 ± 0.0246` | `2.3392 ± 0.0371` | `0.0814 ± 0.0020` | `212,251` | `1.6926 ± 0.0435` | `2.5206 ± 0.2445` |
+| **`A3`** | `predictive_b1.0_a0.5_w2` (`b=1.0`) | `3 (0,1,2)` | `1.7704 ± 0.0156` | **`2.3309 ± 0.0195`** | `0.0802 ± 0.0020` | `212,251` | **`1.6881 ± 0.0418`** | **`2.3760 ± 0.0660`** |
+| **`A3r`** | `predictive_b0.7_a0.5_w2` (`b=0.7`) | `3 (0,1,2)` | `1.7701 ± 0.0071` | `2.3319 ± 0.0114` | **`0.0801 ± 0.0008`** | **`160,006`** | `1.6930 ± 0.0255` | `2.3918 ± 0.0638` |
+
+---
+
+## 6. Hướng dẫn cài đặt & Sử dụng nhanh (PowerShell)
+
+### 6.1. Cài đặt môi trường
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -145,24 +159,24 @@ pip install -e .
 pip install pytest
 ```
 
-### 5.2. Chạy bộ kiểm thử tự động (`pytest`)
-Toàn bộ 67 bài kiểm thử kiểm tra từ chống rò rỉ dữ liệu, tính tất định của Pattern Analyzer, Monitor, Phase 3, Policy, Scheduler đến giao thức so sánh:
+### 6.2. Chạy bộ kiểm thử tự động (`pytest`)
+Toàn bộ 77 bài kiểm thử kiểm tra từ chống rò rỉ dữ liệu, tính tất định của Pattern Analyzer, Monitor, Phase 3, Policy, Scheduler v1 đến giao thức so sánh:
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-### 5.3. Mở giao diện Demo trực quan (Streamlit)
-Giao diện gồm 3 trang:
-1. **So sánh cạnh nhau (Ngoại tuyến):** Đặt 2–3 lần chạy sẵn trên đĩa cạnh nhau, vẽ đường `val_loss` theo **số mẫu tích lũy** và **thời gian tích lũy**, bảng MAE/RMSE (°C) tổng và theo từng Pattern, số mẫu & thời gian đạt ngưỡng `val_target`.
-2. **Quan sát PALF:** Hiển thị trọng số `weights[p]`, tỷ lệ mẫu thực sự được duyệt (`n_seen` share) và các biến Learning State theo từng epoch.
-3. **Huấn luyện trực tiếp (Quy mô nhỏ):** Chạy thử nghiệm nhanh trên tập con dữ liệu với tối đa 4 kết quả lưu đồng thời trên màn hình.
+### 6.3. Mở giao diện Demo trực quan (Streamlit)
+Giao diện gồm 3 trang (xem kịch bản trình diễn tại [`experiments/DEMO_SCRIPT.md`](file:///d:/Github/PALF/experiments/DEMO_SCRIPT.md)):
+1. **So sánh cạnh nhau (Ngoại tuyến - Kết quả chạy sẵn 30 epoch):** Đặt 2–3 lần chạy sẵn trên đĩa cạnh nhau, vẽ đường `val_loss` theo **epoch**, **số mẫu tích lũy** và **thời gian tích lũy**, bảng MAE/RMSE (°C) tổng và theo từng Pattern (`Mean ± Std` qua các seed).
+2. **Quan sát PALF:** Hiển thị trọng số `weights[p]`, tỷ lệ mẫu lịch trình (`quota_planned` share), tỷ lệ mẫu duy nhất (`n_seen` share) và các biến Learning State theo từng epoch.
+3. **CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP):** Chạy thử nghiệm nhanh trên tập con dữ liệu, lưu tách biệt vào `experiments/results/smoke/`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m streamlit run app\app.py
 ```
 
-### 5.4. Chạy huấn luyện qua CLI (`run_observation.py`)
-5 cấu hình tiêu chuẩn trong giao thức thực nghiệm:
+### 6.4. Chạy huấn luyện qua CLI (`run_observation.py`)
+5 cấu hình tiêu chuẩn trong giao thức thực nghiệm (chi tiết trong [`experiments/RUNS.md`](file:///d:/Github/PALF/experiments/RUNS.md)):
 - **A0 (Baseline đầy đủ, $\rho=1.0$):**
   ```powershell
   .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode baseline --seeds 0,1,2,3,4 --epochs 30
@@ -173,31 +187,31 @@ Giao diện gồm 3 trang:
   ```
 - **A1 (Đối chứng thích nghi chỉ dùng `loss_ratio`, $\rho=1.0$):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy loss --budget-ratio 1.0 --alpha 1.0 --seeds 0,1,2 --epochs 30
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy loss --budget-ratio 1.0 --alpha 1.0 --w-max 3.0 --seeds 0,1,2 --epochs 30
   ```
-- **A2 (PALF đa biến `state`, cùng ngân sách $\rho=1.0$):**
+- **A3 (PALF `predictive` Learning State, cùng ngân sách $\rho=1.0$):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy state --budget-ratio 1.0 --alpha 1.0 --seeds 0,1,2 --epochs 30
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy predictive --predictive-coef experiments\analysis\phase3_real\predictive_coef_gru_seeds34.json --budget-ratio 1.0 --alpha 0.5 --w-max 2.0 --seeds 0,1,2 --epochs 30
   ```
-- **A2r (PALF đa biến `state`, giảm ngân sách $\rho=0.7$):**
+- **A3r (PALF `predictive` Learning State, giảm ngân sách $\rho=0.7$):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy state --budget-ratio 0.7 --alpha 1.0 --seeds 0,1,2 --epochs 30
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy predictive --predictive-coef experiments\analysis\phase3_real\predictive_coef_gru_seeds34.json --budget-ratio 0.7 --alpha 0.5 --w-max 2.0 --seeds 0,1,2 --epochs 30
   ```
-*(Mẹo: Thêm `--subset 2048 --epochs 10` khi muốn chạy thử nghiệm nhanh trên máy cá nhân).*
+*(Mẹo: Khi thêm `--subset 2048 --epochs 10`, kết quả sẽ tự động được tách sang `experiments/results/smoke/`).*
 
-### 5.5. Chạy phân tích Phase 3 và tổng hợp so sánh Mục 7
-- **Phân tích Phase 3 trên log Baseline thật:**
+### 6.5. Chạy phân tích Phase 3 (kèm G3 Follow-up) và tổng hợp so sánh Mục 7
+- **Phân tích Phase 3 & Kiểm định G3 trên log Baseline thật:**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\analyze_phase3.py --results-root experiments\results\baseline\jena --out-dir experiments\analysis\phase3_real
+  .\.venv\Scripts\python.exe experiments\scripts\analyze_phase3.py --in-dir experiments\results\baseline\jena --out-dir experiments\analysis\phase3_real --g3-followup
   ```
-- **So sánh các cấu hình Baseline vs PALF (`A0, A0r, A1, A2, A2r`):**
+- **So sánh các cấu hình Baseline vs PALF (`A0, A0r, A1, A3, A3r`):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru,tcn,transformer,patchtst --seeds 0,1,2,3,4 --out-dir experiments\analysis\comparison
+  .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru --seeds 0,1,2 --out-dir experiments\analysis\comparison
   ```
 
 ---
 
-## 6. Nguyên tắc thực nghiệm bất biến (Experimental Integrity)
+## 7. Nguyên tắc thực nghiệm bất biến (Experimental Integrity)
 
 1. **Không rò rỉ tương lai hay tập đánh giá:**
    - Gán nhãn Pattern chỉ dùng cửa sổ quá khứ $X$, mọi thống kê chuẩn hóa và ngưỡng phân vị chỉ khớp trên `train`.

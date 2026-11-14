@@ -54,10 +54,16 @@ def parse_args(argv=None):
         "--mode", type=str, default="baseline", choices=["baseline", "palf"],
         help="Che do huan luyen: 'baseline' hoac 'palf' (mac dinh: baseline)."
     )
-    # Cac co PALF (Phase 5-6)
+    # Cac co PALF (Phase 5-6 v1)
     parser.add_argument(
-        "--policy", type=str, default="state", choices=["uniform", "loss", "state"],
-        help="Chinh sach PALF: uniform, loss, state (mac dinh: state)."
+        "--policy", type=str, default="predictive",
+        choices=["uniform", "loss", "state", "predictive"],
+        help="Chinh sach PALF: uniform, loss, state, predictive (mac dinh: predictive)."
+    )
+    parser.add_argument(
+        "--predictive-coef", dest="predictive_coef_path", type=str,
+        default="experiments/analysis/phase3_real/predictive_coef.json",
+        help="Duong dan file JSON he so hoi quy cho policy='predictive'."
     )
     parser.add_argument(
         "--budget-ratio", dest="budget_ratio", type=float, default=1.0,
@@ -148,6 +154,7 @@ def build_palf_config(args) -> PalfConfig:
         ema_beta=args.ema_beta,
         budget_ratio=args.budget_ratio,
         window=args.window,
+        predictive_coef_path=args.predictive_coef_path,
     )
 
 
@@ -164,6 +171,9 @@ def run_from_args(args):
 
     if args.out_root is not None:
         out_root = args.out_root
+    elif args.subset is not None:
+        sub_mode = "palf" if args.mode == "palf" else "baseline"
+        out_root = os.path.join("experiments", "results", "smoke", sub_mode, "jena")
     elif args.mode == "palf":
         out_root = os.path.join("experiments", "results", "palf", "jena")
     else:

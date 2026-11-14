@@ -606,8 +606,9 @@ def _ols_r2_and_rss(X, y):
     return r2, rss, beta
 
 
-def compute_predictive_test(df_vars, k=3, variables=None):
-    """Muc 6: Kiem dinh bien X(e) co du doan Delta_loss(e -> e+k) ngoai L(e) hay khong."""
+def compute_predictive_test(df_vars, k=3, variables=None, controls_epoch=False):
+    """Muc 6: Kiem dinh bien X(e) co du doan Delta_loss(e -> e+k) ngoai L(e) hay khong.
+    Neu controls_epoch=True: tru trung binh theo epoch (epoch fixed effects) khoi L(e), X(e) va Delta_loss."""
     target_col = f"future_delta_loss_k{k}"
     if target_col not in df_vars.columns:
         raise ValueError(f"Khong tim thay cot '{target_col}' trong df_vars.")
@@ -617,21 +618,32 @@ def compute_predictive_test(df_vars, k=3, variables=None):
 
     rows = []
     for v in variables:
-        sub = df_vars[["loss_norm", v, target_col]].dropna()
+        cols_need = ["loss_norm", v, target_col]
+        if controls_epoch and "epoch" in df_vars.columns:
+            cols_need = ["epoch"] + cols_need
+        sub = df_vars[cols_need].dropna().copy()
         n = len(sub)
         if n < 6 or sub[v].nunique() <= 1:
             rows.append({
                 "variable": v,
                 "horizon_k": int(k),
+                "controls_epoch": bool(controls_epoch),
                 "n_obs": int(n),
                 "r2_baseline_loss_only": np.nan,
                 "r2_with_variable": np.nan,
                 "delta_r2": np.nan,
+                "beta_loss_norm": np.nan,
                 "beta_variable": np.nan,
                 "F_stat": np.nan,
                 "p_value": np.nan,
             })
             continue
+
+        n_ep_groups = 1
+        if controls_epoch and "epoch" in sub.columns:
+            n_ep_groups = int(sub["epoch"].nunique())
+            for c_dem in ("loss_norm", v, target_col):
+                sub[c_dem] = sub[c_dem] - sub.groupby("epoch")[c_dem].transform("mean")
 
         L_cur = sub["loss_norm"].to_numpy(dtype=float)
         X_var = sub[v].to_numpy(dtype=float)
@@ -641,7 +653,7 @@ def compute_predictive_test(df_vars, k=3, variables=None):
         r2_1, rss_1, beta_1 = _ols_r2_and_rss(np.column_stack([L_cur, X_var]), y_delta)
 
         delta_r2 = max(0.0, float(r2_1 - r2_0))
-        dfd = n - 3
+        dfd = n - (2 + n_ep_groups) if controls_epoch else (n - 3)
         if rss_1 > 0 and dfd > 0:
             f_stat = max(0.0, float(((rss_0 - rss_1) / 1.0) / (rss_1 / dfd)))
             p_val = f_sf(f_stat, 1, dfd)
@@ -652,10 +664,12 @@ def compute_predictive_test(df_vars, k=3, variables=None):
         rows.append({
             "variable": v,
             "horizon_k": int(k),
+            "controls_epoch": bool(controls_epoch),
             "n_obs": int(n),
             "r2_baseline_loss_only": float(r2_0),
             "r2_with_variable": float(r2_1),
             "delta_r2": delta_r2,
+            "beta_loss_norm": float(beta_1[1]),
             "beta_variable": float(beta_1[2]),
             "F_stat": f_stat,
             "p_value": p_val,
@@ -1020,4 +1034,357 @@ def run_phase3_analysis(
         "predictive_test": pred_df,
         "null_permutation": null_perm_df,
         "volatility_control": vol_ctrl_df,
+    }
+
+
+def _smooth_series(vals: np.ndarray, method: str = "raw") -> np.ndarray:
+    arr = np.asarray(vals, dtype=float)
+    if method == "raw" or len(arr) == 0:
+        return arr.copy()
+    if method == "ma3":
+        return pd.Series(arr).rolling(window=3, min_periods=1).mean().to_numpy(dtype=float)
+    if method == "ema":
+        out = np.empty_like(arr)
+        out[0] = arr[0]
+        for i in range(1, len(arr)):
+            out[i] = 0.5 * out[i - 1] + 0.5 * arr[i]
+        return out
+    raise ValueError(f"Unknown smoothing method: {method}")
+
+
+def build_tracker_aligned_table(combined_log: pd.DataFrame, W: int = 3, k: int = 3, smooth: str = "raw") -> pd.DataFrame:
+    """Tao bang bien trang thai khop 100% voi LearningStateTracker (loss_ratio, velocity, instability, loss_trend)
+    va dev_ma3 (do lech khoi trung binh truot 3 epoch) de kiem dinh (a), (b), (c) va xuat predictive_coef.json."""
+    df = combined_log.sort_values(["model", "seed", "pattern", "epoch"]).reset_index(drop=True)
+    parts = []
+
+    for (model, seed, pat), grp in df.groupby(["model", "seed", "pattern"], sort=False):
+        grp = grp.sort_values("epoch").copy()
+        raw_loss = grp["train_loss_mean"].to_numpy(dtype=float)
+        ep1 = raw_loss[0] if (len(raw_loss) > 0 and raw_loss[0] > 0) else 1.0
+        lr_raw = raw_loss / ep1
+        lr = _smooth_series(lr_raw, method=smooth)
+
+        n = len(lr)
+        vel = np.full(n, np.nan, dtype=float)
+        instab = np.full(n, np.nan, dtype=float)
+        ltrend = np.full(n, np.nan, dtype=float)
+        ma3 = pd.Series(lr_raw).rolling(window=3, min_periods=1).mean().to_numpy(dtype=float)
+        dev_ma3 = lr_raw - ma3
+        delta_k = np.full(n, np.nan, dtype=float)
+
+        for i in range(n):
+            if i >= W:
+                vel[i] = (lr[i - W] - lr[i]) / float(W)
+            if i + 1 >= W:
+                win = lr[i - W + 1 : i + 1]
+                instab[i] = float(np.std(win, ddof=0))
+                ltrend[i] = _linear_slope(win)
+            if i + k < n:
+                delta_k[i] = lr[i + k] - lr[i]
+
+        grp["loss_ratio"] = lr
+        grp["loss_norm"] = lr
+        grp["velocity"] = vel
+        grp["instability"] = instab
+        grp["prediction_stability_ps"] = instab
+        grp["loss_trend"] = ltrend
+        grp["dev_ma3"] = dev_ma3
+        grp[f"future_delta_loss_k{k}"] = delta_k
+        parts.append(grp)
+
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+
+
+def fit_predictive_coef_dict(
+    df_aligned: pd.DataFrame,
+    features=("loss_ratio", "instability"),
+    k: int = 3,
+    fit_scope: str = "pooled",
+    fit_seeds=(0, 1, 2, 3, 4),
+    controls_epoch: bool = True,
+) -> dict:
+    """Uoc luong he so hoi quy Delta_loss_k ~ features (da chuan hoa z-score tren tap fit)
+    co kiem soat hieu ung co dinh theo epoch, xuat dung dinh dang predictive_coef.json (Phan 1 Buoc 2)."""
+    target_col = f"future_delta_loss_k{k}"
+    sub = df_aligned.copy()
+    if fit_scope != "pooled":
+        sub = sub[sub["model"] == fit_scope]
+    if fit_seeds is not None:
+        sub = sub[sub["seed"].isin(list(fit_seeds))]
+
+    cols = ["epoch", target_col] + list(features)
+    sub = sub[cols].dropna().copy()
+    if len(sub) < 6:
+        raise ValueError(f"Khong du quan sat de fit predictive_coef cho scope={fit_scope}, seeds={fit_seeds}")
+
+    standardize = {}
+    Z_cols = []
+    for f in features:
+        arr = sub[f].to_numpy(dtype=float)
+        mu = float(arr.mean())
+        sd = float(arr.std(ddof=0))
+        if sd <= 1e-12:
+            sd = 1.0
+        standardize[f] = {"mean": mu, "std": sd}
+        sub[f"_z_{f}"] = (arr - mu) / sd
+        Z_cols.append(f"_z_{f}")
+
+    y_raw = sub[target_col].to_numpy(dtype=float)
+    intercept = float(y_raw.mean())
+
+    if controls_epoch:
+        y_fit = (sub[target_col] - sub.groupby("epoch")[target_col].transform("mean")).to_numpy(dtype=float)
+        X_fit = np.column_stack([
+            (sub[zc] - sub.groupby("epoch")[zc].transform("mean")).to_numpy(dtype=float)
+            for zc in Z_cols
+        ])
+        beta, _, _, _ = np.linalg.lstsq(X_fit, y_fit, rcond=None)
+    else:
+        X_design = np.column_stack([np.ones(len(sub)), sub[Z_cols].to_numpy(dtype=float)])
+        b_full, _, _, _ = np.linalg.lstsq(X_design, y_raw, rcond=None)
+        intercept = float(b_full[0])
+        beta = b_full[1:]
+
+    coef_dict = {f: float(b) for f, b in zip(features, beta)}
+    return {
+        "target": f"delta_loss_k{k}",
+        "features": list(features),
+        "standardize": standardize,
+        "intercept": intercept,
+        "coef": coef_dict,
+        "fit_scope": str(fit_scope),
+        "fit_seeds": [int(s) for s in fit_seeds],
+        "controls_epoch": bool(controls_epoch),
+    }
+
+
+def _eval_cross_seed_oos(df_aligned: pd.DataFrame, var_name: str, train_seeds, test_seeds, k: int = 3) -> dict:
+    """Huan luyen mo hinh (co kiem soat epoch) tren train_seeds, danh gia R2 ngoai mau tren test_seeds."""
+    target_col = f"future_delta_loss_k{k}"
+    sub = df_aligned[["model", "seed", "epoch", "loss_ratio", var_name, target_col]].dropna().copy()
+    # Demean theo (model, epoch) tren tung tap train/test doc lap de loai trung binh epoch
+    tr = sub[sub["seed"].isin(train_seeds)].copy()
+    te = sub[sub["seed"].isin(test_seeds)].copy()
+    if len(tr) < 6 or len(te) < 6:
+        return {"r2_oos_loss_only": np.nan, "r2_oos_full": np.nan, "delta_r2_oos": np.nan}
+
+    for df_part in (tr, te):
+        for c in ("loss_ratio", var_name, target_col):
+            df_part[c] = df_part[c] - df_part.groupby(["model", "epoch"])[c].transform("mean")
+
+    X0_tr = np.column_stack([np.ones(len(tr)), tr["loss_ratio"].to_numpy(dtype=float)])
+    X1_tr = np.column_stack([np.ones(len(tr)), tr["loss_ratio"].to_numpy(dtype=float), tr[var_name].to_numpy(dtype=float)])
+    y_tr = tr[target_col].to_numpy(dtype=float)
+
+    b0, _, _, _ = np.linalg.lstsq(X0_tr, y_tr, rcond=None)
+    b1, _, _, _ = np.linalg.lstsq(X1_tr, y_tr, rcond=None)
+
+    X0_te = np.column_stack([np.ones(len(te)), te["loss_ratio"].to_numpy(dtype=float)])
+    X1_te = np.column_stack([np.ones(len(te)), te["loss_ratio"].to_numpy(dtype=float), te[var_name].to_numpy(dtype=float)])
+    y_te = te[target_col].to_numpy(dtype=float)
+
+    tss_te = float(np.sum((y_te - y_te.mean()) ** 2))
+    if tss_te <= 0:
+        return {"r2_oos_loss_only": 0.0, "r2_oos_full": 0.0, "delta_r2_oos": 0.0}
+
+    rss0_te = float(np.sum((y_te - X0_te @ b0) ** 2))
+    rss1_te = float(np.sum((y_te - X1_te @ b1) ** 2))
+    r2_0 = 1.0 - rss0_te / tss_te
+    r2_1 = 1.0 - rss1_te / tss_te
+    return {
+        "r2_oos_loss_only": float(r2_0),
+        "r2_oos_full": float(r2_1),
+        "delta_r2_oos": float(r2_1 - r2_0),
+    }
+
+
+def run_g3_followup_analysis(
+    in_path: str = "experiments/results/baseline/jena",
+    out_dir: str = "experiments/analysis/phase3_real",
+    W: int = 3,
+    k: int = 3,
+) -> dict:
+    """Thuc hien toan bo Phan 4.1 (a, b, c), 4.2 (xuat 3 file predictive_coef*.json)
+    va 4.3 (viet g3_followup.md theo nguong dat truoc)."""
+    run_dirs = discover_run_dirs(in_path)
+    if not run_dirs:
+        raise FileNotFoundError(f"Khong tim thay epoch_pattern_log.csv trong '{in_path}'")
+    os.makedirs(out_dir, exist_ok=True)
+
+    logs = []
+    for rd in run_dirs:
+        meta = _infer_run_metadata(rd)
+        df_l = pd.read_csv(os.path.join(rd, "epoch_pattern_log.csv"))
+        df_l["model"] = meta["model"]
+        df_l["seed"] = meta["seed"]
+        logs.append(df_l)
+    combined_log = pd.concat(logs, ignore_index=True)
+
+    df_raw = build_tracker_aligned_table(combined_log, W=W, k=k, smooth="raw")
+    df_ma3 = build_tracker_aligned_table(combined_log, W=W, k=k, smooth="ma3")
+    df_ema = build_tracker_aligned_table(combined_log, W=W, k=k, smooth="ema")
+
+    vars_check = ["instability", "loss_trend", "velocity"]
+    models = sorted(df_raw["model"].unique())
+
+    # (a) Truoc va sau kiem soat epoch tren tung backbone va pooled
+    rows_a = []
+    for scope in models + ["pooled"]:
+        sub_df = df_raw if scope == "pooled" else df_raw[df_raw["model"] == scope]
+        res_no = compute_predictive_test(sub_df, k=k, variables=vars_check, controls_epoch=False).set_index("variable")
+        res_fe = compute_predictive_test(sub_df, k=k, variables=vars_check, controls_epoch=True).set_index("variable")
+        for v in vars_check:
+            rows_a.append({
+                "scope": scope,
+                "variable": v,
+                "delta_r2_before_fe": float(res_no.loc[v, "delta_r2"]),
+                "beta_before_fe": float(res_no.loc[v, "beta_variable"]),
+                "p_before_fe": float(res_no.loc[v, "p_value"]),
+                "delta_r2_after_fe": float(res_fe.loc[v, "delta_r2"]),
+                "beta_after_fe": float(res_fe.loc[v, "beta_variable"]),
+                "p_after_fe": float(res_fe.loc[v, "p_value"]),
+            })
+    df_a = pd.DataFrame(rows_a)
+    df_a.to_csv(os.path.join(out_dir, "g3_check_a_epoch_control.csv"), index=False)
+
+    # (b-i) Loc nhieu (ma3 va ema) co kiem soat epoch
+    rows_b_smooth = []
+    for sm_name, sm_df in [("raw", df_raw), ("ma3", df_ma3), ("ema", df_ema)]:
+        for scope in models + ["pooled"]:
+            sub_df = sm_df if scope == "pooled" else sm_df[sm_df["model"] == scope]
+            res_fe = compute_predictive_test(sub_df, k=k, variables=vars_check, controls_epoch=True).set_index("variable")
+            for v in vars_check:
+                rows_b_smooth.append({
+                    "smoothing": sm_name,
+                    "scope": scope,
+                    "variable": v,
+                    "delta_r2_after_fe": float(res_fe.loc[v, "delta_r2"]),
+                    "beta_after_fe": float(res_fe.loc[v, "beta_variable"]),
+                    "p_after_fe": float(res_fe.loc[v, "p_value"]),
+                })
+    df_b_smooth = pd.DataFrame(rows_b_smooth)
+    df_b_smooth.to_csv(os.path.join(out_dir, "g3_check_b_smoothing.csv"), index=False)
+
+    # (b-ii) Cross-seed out-of-sample R2 (0-2 -> 3-4 va 3-4 -> 0-2)
+    rows_b_oos = []
+    for scope in models + ["pooled"]:
+        sub_df = df_raw if scope == "pooled" else df_raw[df_raw["model"] == scope]
+        for v in vars_check:
+            fwd = _eval_cross_seed_oos(sub_df, v, [0, 1, 2], [3, 4], k=k)
+            bwd = _eval_cross_seed_oos(sub_df, v, [3, 4], [0, 1, 2], k=k)
+            rows_b_oos.append({
+                "scope": scope,
+                "variable": v,
+                "r2_oos_012_to_34_loss": fwd["r2_oos_loss_only"],
+                "r2_oos_012_to_34_full": fwd["r2_oos_full"],
+                "delta_r2_oos_012_to_34": fwd["delta_r2_oos"],
+                "r2_oos_34_to_012_loss": bwd["r2_oos_loss_only"],
+                "r2_oos_34_to_012_full": bwd["r2_oos_full"],
+                "delta_r2_oos_34_to_012": bwd["delta_r2_oos"],
+            })
+    df_b_oos = pd.DataFrame(rows_b_oos)
+    df_b_oos.to_csv(os.path.join(out_dir, "g3_check_b_cross_seed_oos.csv"), index=False)
+
+    # (c) Kiem quay ve trung binh truc tiep (dev_ma3 = loss_ratio - ma3)
+    target_col = f"future_delta_loss_k{k}"
+    rows_c = []
+    for scope in models + ["pooled"]:
+        sub_df = df_raw if scope == "pooled" else df_raw[df_raw["model"] == scope]
+        res_dev = compute_predictive_test(sub_df, k=k, variables=["dev_ma3"], controls_epoch=True).iloc[0]
+        # Kiem tra phan du Delta R2 cua instability/loss_trend/velocity SAU KHI da dua dev_ma3 vao mo hinh co so
+        for v in vars_check:
+            sub_c = sub_df[["epoch", "loss_ratio", "dev_ma3", v, target_col]].dropna().copy()
+            for c_dem in ("loss_ratio", "dev_ma3", v, target_col):
+                sub_c[c_dem] = sub_c[c_dem] - sub_c.groupby("epoch")[c_dem].transform("mean")
+            X_base_dev = np.column_stack([sub_c["loss_ratio"].to_numpy(dtype=float), sub_c["dev_ma3"].to_numpy(dtype=float)])
+            X_full_dev = np.column_stack([X_base_dev, sub_c[v].to_numpy(dtype=float)])
+            y_c = sub_c[target_col].to_numpy(dtype=float)
+            r2_bd, _, _ = _ols_r2_and_rss(X_base_dev, y_c)
+            r2_fd, _, b_fd = _ols_r2_and_rss(X_full_dev, y_c)
+            rows_c.append({
+                "scope": scope,
+                "beta_dev_ma3": float(res_dev["beta_variable"]),
+                "delta_r2_dev_ma3": float(res_dev["delta_r2"]),
+                "variable": v,
+                "delta_r2_given_dev_ma3": max(0.0, float(r2_fd - r2_bd)),
+                "beta_given_dev_ma3": float(b_fd[3]),
+            })
+    df_c = pd.DataFrame(rows_c)
+    df_c.to_csv(os.path.join(out_dir, "g3_check_c_mean_reversion.csv"), index=False)
+
+    # Phan 4.2: Xuat 3 ban predictive_coef*.json + ban mac dinh predictive_coef.json
+    coef_pooled = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="pooled", fit_seeds=(0, 1, 2, 3, 4), controls_epoch=True)
+    coef_gru = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(0, 1, 2, 3, 4), controls_epoch=True)
+    coef_gru34 = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(3, 4), controls_epoch=True)
+
+    for fname, cdict in [
+        ("predictive_coef_pooled.json", coef_pooled),
+        ("predictive_coef_gru.json", coef_gru),
+        ("predictive_coef_gru_seeds34.json", coef_gru34),
+        ("predictive_coef.json", coef_gru34),
+    ]:
+        with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as f:
+            json.dump(cdict, f, indent=2)
+
+    # Phan 4.3: Danh gia theo nguong dat truoc cho instability (prediction_stability_ps)
+    sub_instab = df_a[(df_a["variable"] == "instability") & (df_a["scope"].isin(models))]
+    n_pass_dr2 = int((sub_instab["delta_r2_after_fe"] >= 0.02).sum())
+    signs = np.sign(sub_instab["beta_after_fe"].to_numpy(dtype=float))
+    same_sign = bool(len(signs) == 4 and (np.all(signs > 0) or np.all(signs < 0)))
+    keep_learning_state = bool(n_pass_dr2 >= 3 and same_sign)
+    verdict_str = (
+        "GIỮ Learning State {loss_ratio, instability} (đạt ngưỡng đặt trước)"
+        if keep_learning_state
+        else "LUI VỀ PHƯƠNG ÁN DỰ PHÒNG (không đạt ngưỡng ΔR² ≥ 0.02 ở ≥ 3/4 backbone và cùng dấu ở cả 4)"
+    )
+
+    md_lines = [
+        "# Báo cáo G3 Follow-up: Kiểm soát Epoch, Lọc Nhiễu & Kiểm định Mean-Reversion (Prompt 7 — Phần 4)",
+        "",
+        "## 1. Kết luận theo ngưỡng đặt trước (Pre-registered Decision Rule)",
+        "",
+        "- **Ngưỡng đặt trước (Prompt 7 Phần 4.3):** *Learning State được giữ nếu $\\Delta R^2$ sau kiểm soát epoch $\\ge 0.02$ ở ít nhất 3/4 backbone và dấu $\\beta$ cùng chiều ở cả 4. Nếu không, báo \"lui về phương án dự phòng\".*",
+        f"- **Kết quả của `instability` (`prediction_stability_ps`):** Số backbone có $\\Delta R^2 \\ge 0.02$ sau kiểm soát epoch = **{n_pass_dr2}/4** | Dấu $\\beta$ cùng chiều ở cả 4 backbone = **{same_sign}**.",
+        f"- **Quyết định chính thức:** **{verdict_str}**.",
+        "",
+        "## 2. Kiểm tra (a) — Trước và Sau khi Kiểm soát Hiệu ứng Cố định theo Epoch (`controls_epoch`)",
+        "",
+        _df_to_markdown(df_a),
+        "",
+        "## 3. Kiểm tra (b) — Lọc nhiễu (`ma3`, `ema`) và Tái lập ngoài mẫu giữa các Seed (`0-2 ↔ 3-4`)",
+        "",
+        "### 3.1. Trên đường cong loss đã làm mượt (có kiểm soát epoch)",
+        "",
+        _df_to_markdown(df_b_smooth[df_b_smooth["scope"].isin(["gru", "pooled"])]),
+        "",
+        "### 3.2. $R^2$ ngoài mẫu chéo giữa các Seed (`Seed 0-2 -> 3-4` và `Seed 3-4 -> 0-2`)",
+        "",
+        _df_to_markdown(df_b_oos),
+        "",
+        "## 4. Kiểm tra (c) — Kiểm định trực tiếp hiện tượng \"Quay về trung bình\" (`dev_ma3 = loss_ratio - ma3`)",
+        "",
+        _df_to_markdown(df_c),
+        "",
+        "## 5. Hệ số xuất ra trong `predictive_coef.json` (Bản GRU học trên Seed 3–4, dùng cho Seed 0–2)",
+        "",
+        "```json",
+        json.dumps(coef_gru34, indent=2),
+        "```",
+    ]
+    g3_path = os.path.join(out_dir, "g3_followup.md")
+    with open(g3_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(md_lines) + "\n")
+
+    return {
+        "df_a": df_a,
+        "df_b_smooth": df_b_smooth,
+        "df_b_oos": df_b_oos,
+        "df_c": df_c,
+        "coef_pooled": coef_pooled,
+        "coef_gru": coef_gru,
+        "coef_gru34": coef_gru34,
+        "keep_learning_state": keep_learning_state,
+        "verdict": verdict_str,
+        "report_path": g3_path,
     }

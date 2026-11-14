@@ -35,14 +35,14 @@ def parse_args(argv=None):
     parser.add_argument(
         "--models",
         type=str,
-        default="gru,tcn,transformer,patchtst",
-        help="Danh sach backbone cach nhau boi dau phay (mac dinh: gru,tcn,transformer,patchtst).",
+        default="gru",
+        help="Danh sach backbone cach nhau boi dau phay (mac dinh: gru).",
     )
     parser.add_argument(
         "--seeds",
         type=str,
-        default="0,1,2,3,4",
-        help="Danh sach seed cach nhau boi dau phay (mac dinh: 0,1,2,3,4).",
+        default="0,1,2",
+        help="Danh sach seed cach nhau boi dau phay (mac dinh: 0,1,2 theo Prompt 7 Phan 5.2).",
     )
     return parser.parse_args(argv)
 

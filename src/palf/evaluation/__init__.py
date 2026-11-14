@@ -15,6 +15,7 @@ from .demo_loader import (
     discover_saved_runs,
     load_saved_run,
     summarize_palf_diagnostics,
+    summarize_pattern_mae_across_seeds,
     summarize_side_by_side,
 )
 from .phase3_analysis import (

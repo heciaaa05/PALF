@@ -1,4 +1,10 @@
-"""Cau hinh trung tam PalfConfig cho Policy Engine va Adaptive Scheduler (Phase 5-6)."""
+"""Cau hinh trung tam PalfConfig cho Policy Engine va Adaptive Scheduler (Spec Phase 5-6 v1).
+
+CANH BAO (Prompt 7 Buoc 3b):
+- `DEFAULT_STATE_SIGNS` la gia thuyet ban dau tu v0 va CHUA DUOC Phase 3 xac nhan tren ca 4 backbone.
+- Che do `policy="state"` chi giu lai de doi chieu lich su, KHONG dung trong bang so sanh chinh.
+- Bang so sanh chinh su dung `policy="predictive"` (doc he so hoi quy tu `predictive_coef_path`).
+"""
 from dataclasses import dataclass, field
 from typing import Dict, Tuple
 
@@ -9,11 +15,16 @@ DEFAULT_STATE_SIGNS: Dict[str, float] = {
     "velocity": 1.0,
     "instability": 0.5,
 }
+DEFAULT_PREDICTIVE_COEF_PATH: str = "experiments/analysis/phase3_real/predictive_coef.json"
 
 
 @dataclass
 class PalfConfig:
-    policy: str = "state"        # "state" (PALF) | "loss" (doi chung B2) | "uniform" (baseline qua scheduler)
+    """Cau hinh cho Policy Engine va Adaptive Scheduler.
+    Luu y: Che do 'state' dung DEFAULT_STATE_SIGNS chua duoc Phase 3 xac nhan (chi giu de doi chieu);
+    khuyen nghi dung 'predictive' (PALF v1) hoac 'loss' (B2) / 'uniform' (A0r)."""
+
+    policy: str = "state"        # "predictive" (PALF v1) | "state" (v0) | "loss" (B2) | "uniform" (A0r)
     warmup_epochs: int = 3
     update_every: int = 1        # cap nhat trong so moi bao nhieu epoch
     alpha: float = 1.0           # do manh phan ung
@@ -24,13 +35,16 @@ class PalfConfig:
     window: int = 3              # W: cua so epoch tinh xu huong/dao dong
     state_vars: Tuple[str, ...] = DEFAULT_STATE_VARS
     state_signs: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_STATE_SIGNS))
+    predictive_coef_path: str = DEFAULT_PREDICTIVE_COEF_PATH
     z_clip: float = 3.0          # gioi han tuyet doi cua z-score
     min_floor_samples: int = 32  # san so mau toi thieu moi Pattern (Muc 6)
     min_floor_frac: float = 0.05 # ty le san 5% * pi_p * n_e (Muc 6)
 
     def __post_init__(self):
-        if self.policy not in ("state", "loss", "uniform"):
-            raise ValueError(f"policy='{self.policy}' khong hop le. Chon: 'state', 'loss', 'uniform'.")
+        if self.policy not in ("predictive", "state", "loss", "uniform"):
+            raise ValueError(
+                f"policy='{self.policy}' khong hop le. Chon: 'predictive', 'state', 'loss', 'uniform'."
+            )
         if not (0.0 < self.budget_ratio <= 1.0):
             raise ValueError(f"budget_ratio={self.budget_ratio} phai nam trong (0, 1].")
         if self.w_min <= 0.0 or self.w_max < self.w_min:
@@ -46,6 +60,7 @@ class PalfConfig:
             self.state_signs = {v: DEFAULT_STATE_SIGNS.get(v, 1.0) for v in self.state_vars}
         else:
             self.state_signs = {str(k): float(v) for k, v in self.state_signs.items()}
+        self.predictive_coef_path = str(self.predictive_coef_path)
 
     def to_dict(self) -> dict:
         return {
@@ -60,6 +75,7 @@ class PalfConfig:
             "window": int(self.window),
             "state_vars": list(self.state_vars),
             "state_signs": dict(self.state_signs),
+            "predictive_coef_path": str(self.predictive_coef_path),
             "z_clip": float(self.z_clip),
             "min_floor_samples": int(self.min_floor_samples),
             "min_floor_frac": float(self.min_floor_frac),

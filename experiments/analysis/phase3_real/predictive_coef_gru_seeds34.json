@@ -1,0 +1,28 @@
+{
+  "target": "delta_loss_k3",
+  "features": [
+    "loss_ratio",
+    "instability"
+  ],
+  "standardize": {
+    "loss_ratio": {
+      "mean": 0.26393591904045816,
+      "std": 0.13999486324882152
+    },
+    "instability": {
+      "mean": 0.022948233657642838,
+      "std": 0.040387988647263465
+    }
+  },
+  "intercept": -0.04748577334693152,
+  "coef": {
+    "loss_ratio": -0.01763983244822315,
+    "instability": -0.015401104179535009
+  },
+  "fit_scope": "gru",
+  "fit_seeds": [
+    3,
+    4
+  ],
+  "controls_epoch": true
+}

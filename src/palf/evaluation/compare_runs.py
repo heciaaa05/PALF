@@ -1,4 +1,4 @@
-"""Giao thuc so sanh cong bang Baseline vs PALF (Spec Phase 5-6 Muc 7, Phan 4.2)."""
+"""Giao thuc so sanh cong bang Baseline vs PALF (Spec Phase 5-6 v1 Muc 7, Prompt 7 Phan 4.4-4.5)."""
 import os
 from typing import Dict, List, Optional, Tuple
 import matplotlib
@@ -13,13 +13,14 @@ from .demo_loader import (
     load_saved_run,
 )
 
-# Quy uoc 5 cau hinh chuan theo Spec Muc 7.1
+# Danh sach cau hinh chuan theo Spec v1 Muc 7 & Prompt 7 Phan 5.2
+# Luu y (Prompt 7 Phan 1 Buoc 3b): khong dung 'state' (A2) trong bang so sanh chinh; thay bang 'predictive' (A3, A3r).
 STANDARD_CONFIGS = [
-    {"code": "A0", "mode": "baseline", "config_tag": "baseline", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform (budget 1.0)"},
-    {"code": "A0r", "mode": "palf", "config_tag": "uniform_b0.7", "budget_ratio": 0.7, "ref_code": "A0", "desc": "Baseline uniform qua Scheduler (budget 0.7)"},
-    {"code": "A1", "mode": "palf", "config_tag": "loss_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Doi chung B2 chi dung loss_ratio (budget 1.0)"},
-    {"code": "A2", "mode": "palf", "config_tag": "state_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "PALF Learning State (budget 1.0)"},
-    {"code": "A2r", "mode": "palf", "config_tag": "state_b0.7_a1.0", "budget_ratio": 0.7, "ref_code": "A0r", "desc": "PALF Learning State giam ngan sach (budget 0.7)"},
+    {"code": "A0", "mode": "baseline", "policy": "uniform", "config_tag": "baseline", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform (budget 1.0)"},
+    {"code": "A0r", "mode": "palf", "policy": "uniform", "config_tag": "uniform_b0.7", "budget_ratio": 0.7, "ref_code": "A0", "desc": "Baseline uniform qua Scheduler (budget 0.7)"},
+    {"code": "A1", "mode": "palf", "policy": "loss", "config_tag": "loss_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Doi chung B2 chi dung loss_ratio (budget 1.0)"},
+    {"code": "A3", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "PALF v1 Predictive Learning State (budget 1.0)"},
+    {"code": "A3r", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b0.7_a1.0", "budget_ratio": 0.7, "ref_code": "A0r", "desc": "PALF v1 Predictive giam ngan sach (budget 0.7)"},
 ]
 
 
@@ -29,10 +30,90 @@ def resolve_config_run_dir(
     cfg_spec: dict,
     model: str,
     seed: int,
-) -> str:
+) -> Tuple[str, str]:
+    """Tra ve (run_dir, matched_tag) cho (cfg_spec, model, seed).
+    Uu tien tim dung cfg_spec['config_tag']; neu khong co tren dia va cfg_spec co 'policy' + 'budget_ratio',
+    tim thu muc bat dau bang '<policy>_b<budget_ratio:.1f>' (ho tro tham so alpha, w_max da tinh chinh o Buoc 5.1)."""
+    m_low = model.lower()
     if cfg_spec["mode"] == "baseline":
-        return os.path.join(baseline_root, model.lower(), f"seed{seed}")
-    return os.path.join(palf_root, cfg_spec["config_tag"], model.lower(), f"seed{seed}")
+        return os.path.join(baseline_root, m_low, f"seed{seed}"), "baseline"
+
+    exact_tag = cfg_spec["config_tag"]
+    exact_dir = os.path.join(palf_root, exact_tag, m_low, f"seed{seed}")
+    if os.path.isfile(os.path.join(exact_dir, "history.csv")):
+        return exact_dir, exact_tag
+
+    pol = cfg_spec.get("policy")
+    br = cfg_spec.get("budget_ratio")
+    if pol and br is not None and os.path.isdir(palf_root):
+        prefix = f"{pol}_b{float(br):.1f}"
+        for cand_tag in sorted(os.listdir(palf_root)):
+            if cand_tag == exact_tag or cand_tag.startswith(prefix):
+                cand_dir = os.path.join(palf_root, cand_tag, m_low, f"seed{seed}")
+                if os.path.isfile(os.path.join(cand_dir, "history.csv")):
+                    return cand_dir, cand_tag
+
+    return exact_dir, exact_tag
+
+
+def validate_protocol_consistency(found_runs: List[dict], check_seeds: bool = True) -> None:
+    """Kiem tra nghiem ngat tinh nhat quan cua run_config.json giua moi lan chay dua vao bang (Prompt 7 Phan 4.4).
+    Neu n_train, n_val, n_test, epochs, batch (batch_size), lr hoac danh sach seed lech nhau
+    -> raise ValueError neu ro cap nao va truong nao lech (khong chi canh bao)."""
+    if not found_runs:
+        return
+
+    fields_to_check = ("n_train", "n_val", "n_test", "epochs", "epochs_run", "batch", "lr")
+
+    # Nhom theo backbone de so sanh cac cau hinh tren cung backbone (va giua cac backbone cho cung tap du lieu)
+    ref_run = found_runs[0]
+    ref_rc = ref_run.get("run_config", {})
+    ref_id = f"{ref_run['model'].upper()}/{ref_run['code']}/seed{ref_run['seed']}"
+
+    for r in found_runs[1:]:
+        rc = r.get("run_config", {})
+        cur_id = f"{r['model'].upper()}/{r['code']}/seed{r['seed']}"
+
+        for fld in fields_to_check:
+            v_ref = ref_rc.get(fld)
+            v_cur = rc.get(fld)
+            # Ho tro alias batch_size neu file cu ghi batch_size
+            if fld == "batch":
+                if v_ref is None:
+                    v_ref = ref_rc.get("batch_size")
+                if v_cur is None:
+                    v_cur = rc.get("batch_size")
+            if v_ref is None or v_cur is None:
+                raise ValueError(
+                    f"Thieu truong '{fld}' trong run_config.json khi so sanh ({ref_id} vs {cur_id})."
+                )
+            if isinstance(v_ref, float) or isinstance(v_cur, float):
+                mismatch = not np.isclose(float(v_ref), float(v_cur), rtol=1e-6, atol=1e-9)
+            else:
+                mismatch = int(v_ref) != int(v_cur)
+            if mismatch:
+                raise ValueError(
+                    f"Loi lech cau hinh '{fld}': {ref_id} ({fld}={v_ref}) != {cur_id} ({fld}={v_cur}). "
+                    f"Khong duoc tron lan chay thu (smoke) voi lan chay day du trong bang so sanh!"
+                )
+
+    if check_seeds:
+        for m in sorted({r["model"] for r in found_runs}):
+            m_runs = [r for r in found_runs if r["model"] == m]
+            seeds_by_code: Dict[str, List[int]] = {}
+            for r in m_runs:
+                seeds_by_code.setdefault(r["code"], []).append(int(r["seed"]))
+            codes = sorted(seeds_by_code.keys())
+            if len(codes) >= 2:
+                base_c = "A0" if "A0" in seeds_by_code else codes[0]
+                base_seeds = sorted(seeds_by_code[base_c])
+                for c in codes:
+                    c_seeds = sorted(seeds_by_code[c])
+                    if c_seeds != base_seeds:
+                        raise ValueError(
+                            f"Loi lech danh sach 'seeds' tren backbone '{m.upper()}': "
+                            f"{base_c} (seeds={base_seeds}) != {c} (seeds={c_seeds})."
+                        )
 
 
 def collect_protocol_runs(
@@ -41,9 +122,11 @@ def collect_protocol_runs(
     models: Tuple[str, ...] = ("gru", "tcn", "transformer", "patchtst"),
     seeds: Tuple[int, ...] = (0, 1, 2, 3, 4),
     config_specs: Optional[List[dict]] = None,
+    strict_validation: bool = True,
 ) -> Tuple[List[dict], pd.DataFrame]:
-    """Doc tat ca cac lan chay theo danh sach cau hinh A0, A0r, A1, A2, A2r.
-    Tra ve (found_runs, missing_df) — khong im lang bo qua cau hinh thieu."""
+    """Doc tat ca cac lan chay theo danh sach cau hinh.
+    Tra ve (found_runs, missing_df) — khong im lang bo qua cau hinh thieu,
+    va kiem tra nghiem ngat tinh dong nhat cua run_config.json."""
     specs = config_specs if config_specs is not None else STANDARD_CONFIGS
     found_runs: List[dict] = []
     missing_rows: List[dict] = []
@@ -53,13 +136,18 @@ def collect_protocol_runs(
         for cfg in specs:
             found_seeds = []
             missing_seeds = []
+            matched_tag_used = cfg["config_tag"]
             for s in seeds:
-                r_dir = resolve_config_run_dir(baseline_root, palf_root, cfg, m_low, s)
+                r_dir, matched_tag = resolve_config_run_dir(baseline_root, palf_root, cfg, m_low, s)
                 if os.path.isfile(os.path.join(r_dir, "history.csv")) and os.path.isfile(
                     os.path.join(r_dir, "test_metrics.json")
                 ):
-                    r = load_saved_run(r_dir, label=f"{cfg['code']} ({cfg['config_tag']}) | {m_low.upper()} | seed{s}")
+                    matched_tag_used = matched_tag
+                    r = load_saved_run(
+                        r_dir, label=f"{cfg['code']} ({matched_tag}) | {m_low.upper()} | seed{s}"
+                    )
                     r["code"] = cfg["code"]
+                    r["config_tag"] = matched_tag
                     r["ref_code"] = cfg["ref_code"]
                     r["budget_ratio"] = cfg["budget_ratio"]
                     r["config_desc"] = cfg["desc"]
@@ -74,7 +162,7 @@ def collect_protocol_runs(
                 missing_rows.append({
                     "model": m_low,
                     "code": cfg["code"],
-                    "config_tag": cfg["config_tag"],
+                    "config_tag": matched_tag_used,
                     "description": cfg["desc"],
                     "n_found": len(found_seeds),
                     "found_seeds": ",".join(str(x) for x in found_seeds) if found_seeds else "none",
@@ -82,6 +170,9 @@ def collect_protocol_runs(
                     "missing_seeds": ",".join(str(x) for x in missing_seeds),
                     "status": "PARTIAL" if found_seeds else "MISSING_ALL",
                 })
+
+    if strict_validation and found_runs:
+        validate_protocol_consistency(found_runs, check_seeds=True)
 
     return found_runs, pd.DataFrame(missing_rows)
 
@@ -229,7 +320,6 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
 
     summary_df = pd.DataFrame(summary_rows)
 
-    # Paired seed differences: moi cau hinh so voi ref_code (va luon kem so voi A0 neu ref_code != A0)
     paired_rows = []
     for m, m_grp in detail_df.groupby("model", sort=False):
         by_code = {c: g.set_index("seed") for c, g in m_grp.groupby("code", sort=False)}
@@ -239,6 +329,8 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
             ref_candidates = [g_cur["ref_code"].iloc[0]]
             if "A0" not in ref_candidates:
                 ref_candidates.append("A0")
+            if code in ("A3", "A2") and "A1" in by_code and "A1" not in ref_candidates:
+                ref_candidates.insert(0, "A1")
             for ref_c in ref_candidates:
                 if ref_c not in by_code:
                     continue
@@ -303,7 +395,6 @@ def plot_comparison_figures(
         if not m_runs:
             continue
 
-        # 1. Hinh val_loss theo so mau da xu ly (trung binh theo seed cho tung code)
         fig1, ax1 = plt.subplots(figsize=(7.5, 4.5))
         by_code: Dict[str, List[dict]] = {}
         for r in m_runs:
@@ -311,7 +402,6 @@ def plot_comparison_figures(
 
         for code, r_list in by_code.items():
             tag = r_list[0]["config_tag"]
-            # Gop theo epoch
             all_hist = pd.concat([r["history"][["epoch", "cum_samples", "val_loss"]] for r in r_list], ignore_index=True)
             grp = all_hist.groupby("epoch", as_index=False).agg(
                 cum_samples=("cum_samples", "mean"),
@@ -337,7 +427,6 @@ def plot_comparison_figures(
         plt.close(fig1)
         saved_figs.append(p1)
 
-        # 2. Hinh cot MAE (°C) theo Pattern
         sub_pat = pat_summary_df[(pat_summary_df["model"] == m) & (pat_summary_df["group_type"] == "main_pattern")]
         if not sub_pat.empty:
             fig2, ax2 = plt.subplots(figsize=(8.0, 4.5))
@@ -366,9 +455,11 @@ def write_comparison_markdown(
     out_path: str,
 ) -> str:
     lines = [
-        "# Báo cáo So sánh Giao thức Công bằng: Baseline vs PALF (Mục 7)",
+        "# Báo cáo So sánh Giao thức Công bằng: Baseline vs PALF (Spec v1 — Mục 7)",
         "",
-        "> **Quy tắc thống kê (Spec Mục 7):** Với cấu hình có ít hơn 5 seed (`n_seeds < 5`), báo cáo **chỉ mô tả xu hướng** và hiệu số ghép theo từng seed, tuyệt đối **không tuyên bố ý nghĩa thống kê**.",
+        "> **Quy tắc thống kê & đồng nhất (Spec v1 Mục 7):**",
+        "> 1. Mọi lần chạy trong bảng bắt buộc có cùng `n_train`, `n_val`, `n_test`, `epochs`, `batch`, `lr` và cùng danh sách `seeds` (các lần chạy thử nhỏ lưu riêng ở `experiments/results/smoke/`).",
+        "> 2. Với cấu hình có ít hơn 5 seed (`n_seeds < 5`), báo cáo **chỉ mô tả xu hướng** và hiệu số ghép theo từng seed, tuyệt đối **không tuyên bố ý nghĩa thống kê**.",
         "",
         "## 1. Bảng tổng hợp toàn cục theo Cấu hình & Backbone",
         "",
@@ -408,7 +499,7 @@ def write_comparison_markdown(
                 f"{r['gap_mae_vs_normal_mean']:+.4f} |"
             )
 
-    lines.extend(["", "## 3. So sánh ghép cặp theo Seed (Paired Differences vs A0 / A0r)", ""])
+    lines.extend(["", "## 3. So sánh ghép cặp theo Seed (Paired Differences vs A0 / A0r / A1)", ""])
     if paired_df.empty:
         lines.append("*Chưa có cặp cấu hình PALF vs đối chứng cùng seed để tính hiệu số ghép cặp.*")
     else:
@@ -446,6 +537,7 @@ def run_comparison_protocol(
     models: Tuple[str, ...] = ("gru", "tcn", "transformer", "patchtst"),
     seeds: Tuple[int, ...] = (0, 1, 2, 3, 4),
     config_specs: Optional[List[dict]] = None,
+    strict_validation: bool = True,
 ) -> dict:
     os.makedirs(out_dir, exist_ok=True)
     found_runs, missing_df = collect_protocol_runs(
@@ -454,6 +546,7 @@ def run_comparison_protocol(
         models=models,
         seeds=seeds,
         config_specs=config_specs,
+        strict_validation=strict_validation,
     )
     val_targets = compute_val_targets_from_a0(found_runs)
     detail_df, pattern_df = build_detail_and_pattern_tables(found_runs, val_targets)

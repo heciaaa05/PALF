@@ -9,6 +9,7 @@ from palf.data import prepare_data, prepare_weather_data
 from palf.evaluation.demo_loader import (
     discover_saved_runs,
     summarize_palf_diagnostics,
+    summarize_pattern_mae_across_seeds,
     summarize_side_by_side,
 )
 from palf.models import MODEL_REGISTRY, MODEL_INFO
@@ -150,9 +151,9 @@ def render_result(res):
 page = st.radio(
     "Chọn trang hiển thị",
     [
-        "1. So sánh cạnh nhau (Ngoại tuyến - Kết quả chạy sẵn)",
+        "1. So sánh cạnh nhau (Ngoại tuyến - Kết quả chạy sẵn 30 epoch)",
         "2. Quan sát PALF (Trọng số, Tỷ lệ mẫu & Learning State)",
-        "3. Huấn luyện trực tiếp (Quy mô nhỏ / Thử nghiệm)",
+        "3. CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP)",
     ],
     horizontal=True,
 )
@@ -165,10 +166,11 @@ run_map = {r["label"]: r for r in saved_runs}
 # TRANG 1: SO SANH CANH NHAU (NGOAI TUYEN)
 # =====================================================================
 if page.startswith("1."):
-    st.subheader("So sánh cạnh nhau giữa các lần chạy sẵn trên đĩa")
+    st.subheader("So sánh cạnh nhau giữa các lần chạy sẵn 30 epoch trên đĩa")
     st.caption(
-        "Chế độ demo ngoại tuyến: đọc trực tiếp từ `experiments/results/baseline/jena` và "
-        "`experiments/results/palf/jena` mà không cần huấn luyện lại."
+        "Chế độ mặc định (ngoại tuyến): đọc trực tiếp các lần chạy thật 30 epoch từ "
+        "`experiments/results/baseline/jena` và `experiments/results/palf/jena` "
+        "(tách biệt hoàn toàn khỏi các lần chạy thu nhỏ trong `experiments/results/smoke/`)."
     )
 
     if not saved_runs:
@@ -221,10 +223,25 @@ if page.startswith("1."):
             st.markdown("#### Bảng tổng hợp: Test MAE/RMSE (°C) & Tốc độ đạt ngưỡng Val")
             st.dataframe(overall_df, hide_index=True, use_container_width=True)
 
-            c_plot1, c_plot2 = st.columns(2)
+            c_plot0, c_plot1, c_plot2 = st.columns(3)
+            with c_plot0:
+                st.markdown("#### 1. Đường `val_loss` theo **Epoch**")
+                fig0, ax0 = plt.subplots(figsize=(5.5, 3.8))
+                for r in chosen_runs:
+                    h = r["history"]
+                    ax0.plot(h["epoch"], h["val_loss"], marker="o", markersize=3, label=r["label"])
+                ax0.axhline(custom_target, color="red", linestyle="--", linewidth=1, label=f"val_target={custom_target:.4f}")
+                ax0.set_xlabel("Epoch")
+                ax0.set_ylabel("Validation MSE (chuẩn hóa)")
+                ax0.grid(True, alpha=0.3)
+                ax0.legend(fontsize=7)
+                plt.tight_layout()
+                st.pyplot(fig0)
+                plt.close(fig0)
+
             with c_plot1:
-                st.markdown("#### Đường `val_loss` theo **Số mẫu tích lũy đã xử lý**")
-                fig1, ax1 = plt.subplots(figsize=(6.5, 4.0))
+                st.markdown("#### 2. Đường `val_loss` theo **Số mẫu tích lũy**")
+                fig1, ax1 = plt.subplots(figsize=(5.5, 3.8))
                 for r in chosen_runs:
                     h = r["history"]
                     ax1.plot(h["cum_samples"], h["val_loss"], marker="o", markersize=3, label=r["label"])
@@ -232,14 +249,14 @@ if page.startswith("1."):
                 ax1.set_xlabel("Số mẫu train tích lũy (cumulative samples)")
                 ax1.set_ylabel("Validation MSE (chuẩn hóa)")
                 ax1.grid(True, alpha=0.3)
-                ax1.legend(fontsize=8)
+                ax1.legend(fontsize=7)
                 plt.tight_layout()
                 st.pyplot(fig1)
                 plt.close(fig1)
 
             with c_plot2:
-                st.markdown("#### Đường `val_loss` theo **Thời gian tích lũy (giây)**")
-                fig2, ax2 = plt.subplots(figsize=(6.5, 4.0))
+                st.markdown("#### 3. Đường `val_loss` theo **Thời gian tích lũy (s)**")
+                fig2, ax2 = plt.subplots(figsize=(5.5, 3.8))
                 for r in chosen_runs:
                     h = r["history"]
                     ax2.plot(h["cum_time_sec"], h["val_loss"], marker="s", markersize=3, label=r["label"])
@@ -247,12 +264,12 @@ if page.startswith("1."):
                 ax2.set_xlabel("Thời gian huấn luyện tích lũy (giây)")
                 ax2.set_ylabel("Validation MSE (chuẩn hóa)")
                 ax2.grid(True, alpha=0.3)
-                ax2.legend(fontsize=8)
+                ax2.legend(fontsize=7)
                 plt.tight_layout()
                 st.pyplot(fig2)
                 plt.close(fig2)
 
-            st.markdown("#### Bảng MAE và RMSE (°C) trên tập Test theo từng Pattern")
+            st.markdown("#### Bảng MAE và RMSE (°C) trên tập Test theo từng Pattern (của các lần chạy đang chọn)")
             if not pat_df.empty:
                 c_tb1, c_tb2 = st.columns(2)
                 with c_tb1:
@@ -264,14 +281,19 @@ if page.startswith("1."):
                     rmse_piv = pat_df.pivot(index="Pattern", columns="Run", values="RMSE (°C)")
                     st.dataframe(rmse_piv, use_container_width=True)
 
+            st.markdown("#### Bảng tổng hợp Test MAE & RMSE (°C) theo Pattern qua các Seed (`Mean ± Std`)")
+            agg_pat_df = summarize_pattern_mae_across_seeds(saved_runs, model_filter=sel_model)
+            if not agg_pat_df.empty:
+                st.dataframe(agg_pat_df, hide_index=True, use_container_width=True)
+
 # =====================================================================
 # TRANG 2: QUAN SAT PALF
 # =====================================================================
 elif page.startswith("2."):
     st.subheader("Quan sát cơ chế bên trong của PALF theo Epoch")
     st.caption(
-        "Hiển thị trọng số `weights[p]`, tỷ lệ mẫu thực sự được duyệt theo Pattern, và các biến Learning State "
-        "từ `policy_log.csv` và `epoch_pattern_log.csv`."
+        "Hiển thị trọng số `weights[p]`, tỷ lệ mẫu lịch trình (`quota_planned` share, bao gồm lặp mẫu), "
+        "tỷ lệ mẫu duy nhất (`n_seen` share), và các biến Learning State từ `policy_log.csv`."
     )
 
     palf_runs = [r for r in saved_runs if r.get("has_palf", False)]
@@ -279,7 +301,7 @@ elif page.startswith("2."):
         st.warning("Chưa có kết quả PALF trên đĩa. Giao diện không dựng số liệu giả.")
         st.info(
             "Để tạo kết quả PALF, hãy chạy lệnh ví dụ:\n"
-            "`python experiments/scripts/run_observation.py --model gru --mode palf --policy state --budget-ratio 0.7 --seed 0`"
+            "`python experiments/scripts/run_observation.py --model gru --mode palf --policy predictive --budget-ratio 1.0 --seed 0`"
         )
     else:
         palf_labels = [r["label"] for r in palf_runs]
@@ -299,15 +321,18 @@ elif page.startswith("2."):
             m4.metric("Khoảng [w_min, w_max]", f"[{p_cfg.get('w_min', 0.25):g}, {p_cfg.get('w_max', 3.0):g}]")
             m5.metric("Warm-up / Window", f"{p_cfg.get('warmup_epochs', 3)} / {p_cfg.get('window', 3)}")
 
-            col_w, col_s = st.columns(2)
+            col_w, col_q, col_s = st.columns(3)
             with col_w:
-                st.markdown("#### 1. Trọng số lấy mẫu `weights[p]` theo Epoch")
+                st.markdown("#### 1. Trọng số lấy mẫu `weights[p]`")
                 st.line_chart(diag["weights_pivot"])
+            with col_q:
+                st.markdown("#### 2. Tỷ lệ mẫu lịch trình (`quota_planned` share)")
+                st.line_chart(diag.get("quota_share_pivot", diag["share_pivot"]))
             with col_s:
-                st.markdown("#### 2. Tỷ lệ mẫu thực sự được duyệt (`n_seen` share) theo Pattern")
+                st.markdown("#### 3. Tỷ lệ mẫu duy nhất đã duyệt (`n_seen` share)")
                 st.line_chart(diag["share_pivot"])
 
-            st.markdown("#### 3. Các biến Learning State & Điểm ưu tiên (`need_score`) theo Pattern")
+            st.markdown("#### 4. Các biến Learning State & Điểm ưu tiên (`need_score`) theo Pattern")
             state_pivots = diag["state_pivots"]
             if state_pivots:
                 s_cols = st.columns(2)
@@ -320,17 +345,18 @@ elif page.startswith("2."):
                 st.dataframe(sel_run["policy_log"], hide_index=True, use_container_width=True)
 
 # =====================================================================
-# TRANG 3: HUAN LUYEN TRUC TIEP (QUY MO NHO)
+# TRANG 3: HUAN LUYEN TRUC TIEP (QUY MO NHO / SMOKE)
 # =====================================================================
 else:
+    st.subheader("CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP)")
     st.warning(
-        "⚠️ **Cảnh báo:** Huấn luyện trực tiếp trên giao diện chỉ dành cho thử nghiệm quy mô nhỏ "
-        "(ít epoch, tập con dữ liệu). Để chạy thực nghiệm đầy đủ 30 epoch trên toàn bộ tập Jena, "
-        "hãy dùng `experiments/scripts/run_observation.py` rồi mở trang **1. So sánh cạnh nhau**."
+        "⚠️ **CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP):** Huấn luyện trực tiếp trên giao diện chỉ dành cho thử nghiệm "
+        "nhanh với ít epoch và tập con dữ liệu (`subset`). Mọi kết quả ở trang này được lưu tách biệt sang "
+        "`experiments/results/smoke/` và **không ghi đè hay trộn lẫn** vào danh sách thực nghiệm thật 30 epoch."
     )
 
     with st.sidebar:
-        st.header("Dữ liệu (Train trực tiếp)")
+        st.header("Dữ liệu (CHẠY THU NHỎ / SMOKE)")
         source = st.radio("Nguồn dữ liệu", ["Giả lập (nhanh)", "Thời tiết thật (Jena, Đức)"])
         target_label = None
         subset_size = None
@@ -344,7 +370,7 @@ else:
 
         st.header("Chế độ & Cấu hình PALF")
         train_mode = st.radio("Chế độ huấn luyện", ["baseline", "palf"], horizontal=True)
-        policy_name = "state"
+        policy_name = "predictive"
         budget_ratio = 1.0
         alpha = 1.0
         w_min, w_max = 0.25, 3.0
@@ -354,7 +380,7 @@ else:
         window = 3
 
         if train_mode == "palf":
-            policy_name = st.selectbox("Chính sách (Policy)", ["state", "loss", "uniform"], index=0)
+            policy_name = st.selectbox("Chính sách (Policy)", ["predictive", "loss", "uniform", "state"], index=0)
             budget_ratio = st.slider("Ngân sách mẫu mỗi epoch (budget_ratio)", 0.3, 1.0, 0.7, 0.05)
             alpha = st.slider("Độ mạnh phản ứng (alpha)", 0.25, 3.0, 1.0, 0.25)
             with st.expander("Tham số PALF nâng cao"):
@@ -402,7 +428,7 @@ else:
             if source == "Giả lập (nhanh)":
                 data = load_synthetic()
                 target_idx = 0
-                out_root = "experiments/results/synthetic_demo"
+                out_root = "experiments/results/smoke/synthetic_demo"
             else:
                 with st.spinner("Đang tải / xử lý dữ liệu Jena Climate..."):
                     train_ds, val_ds, test_ds, th, meta = load_weather(target_col)
@@ -412,7 +438,7 @@ else:
                     test_ds = _slice_ds(test_ds, max(64, subset_size // 4))
                 data = (train_ds, val_ds, test_ds, th, meta)
                 target_idx = meta["target_idx"]
-                out_root = "experiments/results/weather_demo"
+                out_root = "experiments/results/smoke/weather_demo"
 
             palf_cfg = None
             if train_mode == "palf":

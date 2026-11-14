@@ -10,6 +10,7 @@ from palf.evaluation.demo_loader import (
     discover_saved_runs,
     load_saved_run,
     summarize_palf_diagnostics,
+    summarize_pattern_mae_across_seeds,
     summarize_side_by_side,
 )
 
@@ -135,7 +136,24 @@ def test_demo_loader_palf_diagnostics_and_missing_palf(tmp_path):
     assert diag_ok["has_palf"] is True
     assert diag_ok["weights_pivot"].shape == (3, 4)
     assert diag_ok["share_pivot"].shape == (3, 4)
+    assert diag_ok["quota_share_pivot"].shape == (3, 4)
     # Tong ty le mau thuc su moi epoch bang 1.0
     assert np.allclose(diag_ok["share_pivot"].sum(axis=1).to_numpy(), 1.0)
+    assert np.allclose(diag_ok["quota_share_pivot"].sum(axis=1).to_numpy(), 1.0)
     for k in ("loss_ratio", "velocity", "instability", "need_score"):
         assert k in diag_ok["state_pivots"]
+
+
+def test_summarize_pattern_mae_across_seeds(tmp_path):
+    b_root = os.path.join(str(tmp_path), "baseline", "jena")
+    p_root = os.path.join(str(tmp_path), "palf", "jena")
+    for s in (0, 1):
+        _write_dummy_run(os.path.join(b_root, "gru", f"seed{s}"), "baseline", "baseline", "gru", s)
+        _write_dummy_run(os.path.join(p_root, "predictive_b1.0_a1.0", "gru", f"seed{s}"), "palf", "predictive_b1.0_a1.0", "gru", s)
+
+    runs = discover_saved_runs(b_root, p_root)
+    agg_df = summarize_pattern_mae_across_seeds(runs, model_filter="GRU")
+    assert not agg_df.empty
+    assert len(agg_df) == 8  # 2 configs x 4 patterns
+    assert set(agg_df["Số seed"]) == {2}
+    assert "±" in agg_df["MAE (°C) (Mean ± Std)"].iloc[0]

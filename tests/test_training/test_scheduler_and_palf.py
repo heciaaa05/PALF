@@ -79,6 +79,50 @@ def test_scheduler_b_w1_budget07_proportional_to_pi():
         assert abs(n_p - expected_p) <= 1
 
 
+def test_scheduler_v1_budget1_nonuniform_weights_change_composition_and_repeat():
+    """(Prompt 7 - Phan 2 Buoc 1): budget_ratio=1.0, w cua mot Pattern = 2, cac Pattern khac = 1:
+    - Tong so mau cua epoch van bang n_train
+    - Ty trong thuc te cua Pattern do dung bang q_p (sai so lam tron <= 1 mau)
+    - Pattern bi tang ty trong vuot N_p: dung het N_p mau mot lan roi lay them co lap
+    - Pattern bi giam ty trong (< N_p): chon khong lap."""
+    counts = (80, 120, 100, 700)
+    pat = _make_imbalanced_pat(counts)
+    n_train = len(pat)
+    cfg = PalfConfig(budget_ratio=1.0, min_floor_samples=32, min_floor_frac=0.05)
+    sched = AdaptiveScheduler(pat, WEATHER_PATTERNS, cfg=cfg, seed=13)
+
+    weights = {
+        "pressure_drop": 2.0,
+        "humidity_net_rise": 1.0,
+        "temp_anomaly": 1.0,
+        "normal": 1.0,
+    }
+    dec = PolicyDecision(weights=weights, info={})
+    idx = sched.plan_epoch(epoch=3, decision=dec)
+
+    # Tong so mau cua epoch van bang n_train
+    assert len(idx) == n_train
+
+    # Tinh q_p ly thuyet
+    raw_q = np.array([weights[p] * (counts[i] / n_train) for i, p in enumerate(WEATHER_PATTERNS)])
+    q = raw_q / raw_q.sum()
+
+    for i, p_name in enumerate(WEATHER_PATTERNS):
+        mask_p = pat[idx] == i
+        n_p = int(mask_p.sum())
+        expected_p = round(n_train * q[i])
+        assert abs(n_p - expected_p) <= 1, f"Pattern {p_name}: n_p={n_p} != expected={expected_p}"
+
+        idx_p = idx[mask_p]
+        pool_p = np.where(pat == i)[0]
+        if n_p > counts[i]:
+            # Dung het N_p mau mot lan roi lay them co lap
+            assert set(idx_p.tolist()) == set(pool_p.tolist())
+        else:
+            # Chon ngau nhien khong lap
+            assert len(np.unique(idx_p)) == n_p
+
+
 def test_scheduler_c_d_exact_total_and_floor_enforced():
     """(c) Tong so mau moi epoch dung bang n_e; (d) khong Pattern nao duoi san."""
     counts = (80, 120, 100, 700)
@@ -87,7 +131,7 @@ def test_scheduler_c_d_exact_total_and_floor_enforced():
     cfg = PalfConfig(budget_ratio=0.65, min_floor_samples=32, min_floor_frac=0.05)
     sched = AdaptiveScheduler(pat, WEATHER_PATTERNS, cfg=cfg, seed=19)
 
-    # Trong so cuc doan: 1 pattern rat cao (vuot tran N_p), 1 pattern rat thap (cham san)
+    # Trong so cuc doan: 1 pattern rat cao (vuot N_p), 1 pattern rat thap (cham san)
     weights = {
         "pressure_drop": 3.0,
         "humidity_net_rise": 2.5,
@@ -98,16 +142,20 @@ def test_scheduler_c_d_exact_total_and_floor_enforced():
     idx = sched.plan_epoch(epoch=4, decision=dec)
     n_e = int(round(0.65 * n_train))
 
-    # (c) Tong so mau dung bang n_e va khong lap
+    # (c) Tong so mau dung bang n_e
     assert len(idx) == n_e
-    assert len(np.unique(idx)) == n_e
 
-    # (d) Moi Pattern >= san min_floor_samples (32) va <= N_p
+    # (d) Moi Pattern >= san min_floor_samples (32); neu n_p > N_p thi phai chua du N_p mau goc
     for i, p_name in enumerate(WEATHER_PATTERNS):
-        n_p = int((pat[idx] == i).sum())
+        mask_p = pat[idx] == i
+        n_p = int(mask_p.sum())
         floor_p = min(counts[i], max(32, int(round(0.05 * (counts[i] / n_train) * n_e))))
         assert n_p >= floor_p
-        assert n_p <= counts[i]
+        idx_p = idx[mask_p]
+        if n_p > counts[i]:
+            assert len(np.unique(idx_p)) == counts[i]
+        else:
+            assert len(np.unique(idx_p)) == n_p
 
 
 def test_scheduler_e_same_seed_reproducibility():
