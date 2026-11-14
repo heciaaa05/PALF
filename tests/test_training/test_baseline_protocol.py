@@ -171,19 +171,14 @@ def test_step0_same_seed_reproducibility(tmp_path):
     assert r1["test_metrics"]["rmse_degC"] == pytest.approx(r2["test_metrics"]["rmse_degC"], abs=1e-6)
 
 
-def test_run_observation_cli_and_palf_mode_blocked(tmp_path):
-    """Kiem tra script CLI run_observation.py tao du 8 file va chan --mode palf."""
+def test_run_observation_cli_baseline_and_palf(tmp_path):
+    """Kiem tra script CLI run_observation.py tao du 8 file cho baseline va 9 file cho palf."""
     script_path = os.path.join("experiments", "scripts", "run_observation.py")
     spec = importlib.util.spec_from_file_location("run_observation", script_path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 
-    # Kiem tra chan --mode palf
-    args_palf = mod.parse_args(["--model", "gru", "--mode", "palf"])
-    with pytest.raises(RuntimeError, match="mode palf"):
-        mod.run_from_args(args_palf)
-
-    # Chay thu 2 epoch tren subset cua Jena
+    # Chay thu 2 epoch baseline tren subset cua Jena
     args_ok = mod.parse_args([
         "--model", "gru",
         "--seed", "0",
@@ -197,3 +192,23 @@ def test_run_observation_cli_and_palf_mode_blocked(tmp_path):
     out_dir = os.path.join(str(tmp_path), "gru", "seed0")
     for fname in EXPECTED_8_FILES:
         assert os.path.isfile(os.path.join(out_dir, fname))
+
+    # Chay thu 2 epoch palf tren subset cua Jena
+    palf_root = os.path.join(str(tmp_path), "palf_out")
+    args_palf = mod.parse_args([
+        "--model", "gru",
+        "--mode", "palf",
+        "--policy", "state",
+        "--budget-ratio", "0.7",
+        "--alpha", "1.0",
+        "--seed", "0",
+        "--epochs", "2",
+        "--batch", "16",
+        "--subset", "48",
+        "--out-root", palf_root,
+    ])
+    res_palf = mod.run_from_args(args_palf)
+    assert len(res_palf) == 1
+    palf_dir = os.path.join(palf_root, "state_b0.7_a1.0", "gru", "seed0")
+    for fname in EXPECTED_8_FILES + ["policy_log.csv"]:
+        assert os.path.isfile(os.path.join(palf_dir, fname))

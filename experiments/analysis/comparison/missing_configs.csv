@@ -1,0 +1,17 @@
+model,code,config_tag,description,n_found,found_seeds,n_missing,missing_seeds,status
+gru,A0r,uniform_b0.7,Baseline uniform qua Scheduler (budget 0.7),3,"0,1,2",2,"3,4",PARTIAL
+gru,A1,loss_b1.0_a1.0,Doi chung B2 chi dung loss_ratio (budget 1.0),3,"0,1,2",2,"3,4",PARTIAL
+gru,A2,state_b1.0_a1.0,PALF Learning State (budget 1.0),3,"0,1,2",2,"3,4",PARTIAL
+gru,A2r,state_b0.7_a1.0,PALF Learning State giam ngan sach (budget 0.7),3,"0,1,2",2,"3,4",PARTIAL
+tcn,A0r,uniform_b0.7,Baseline uniform qua Scheduler (budget 0.7),0,none,5,"0,1,2,3,4",MISSING_ALL
+tcn,A1,loss_b1.0_a1.0,Doi chung B2 chi dung loss_ratio (budget 1.0),0,none,5,"0,1,2,3,4",MISSING_ALL
+tcn,A2,state_b1.0_a1.0,PALF Learning State (budget 1.0),0,none,5,"0,1,2,3,4",MISSING_ALL
+tcn,A2r,state_b0.7_a1.0,PALF Learning State giam ngan sach (budget 0.7),0,none,5,"0,1,2,3,4",MISSING_ALL
+transformer,A0r,uniform_b0.7,Baseline uniform qua Scheduler (budget 0.7),0,none,5,"0,1,2,3,4",MISSING_ALL
+transformer,A1,loss_b1.0_a1.0,Doi chung B2 chi dung loss_ratio (budget 1.0),0,none,5,"0,1,2,3,4",MISSING_ALL
+transformer,A2,state_b1.0_a1.0,PALF Learning State (budget 1.0),0,none,5,"0,1,2,3,4",MISSING_ALL
+transformer,A2r,state_b0.7_a1.0,PALF Learning State giam ngan sach (budget 0.7),0,none,5,"0,1,2,3,4",MISSING_ALL
+patchtst,A0r,uniform_b0.7,Baseline uniform qua Scheduler (budget 0.7),0,none,5,"0,1,2,3,4",MISSING_ALL
+patchtst,A1,loss_b1.0_a1.0,Doi chung B2 chi dung loss_ratio (budget 1.0),0,none,5,"0,1,2,3,4",MISSING_ALL
+patchtst,A2,state_b1.0_a1.0,PALF Learning State (budget 1.0),0,none,5,"0,1,2,3,4",MISSING_ALL
+patchtst,A2r,state_b0.7_a1.0,PALF Learning State giam ngan sach (budget 0.7),0,none,5,"0,1,2,3,4",MISSING_ALL

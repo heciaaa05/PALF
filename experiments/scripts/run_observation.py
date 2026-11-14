@@ -1,21 +1,18 @@
-"""Script chay quan sat / baseline tren du lieu Jena Climate (hoac synthetic).
+"""Script chay quan sat / baseline va PALF tren du lieu Jena Climate (hoac synthetic).
 
-Quy uoc dau ra (Prompt 5 - Phan A):
-    experiments/results/baseline/jena/<model>/seed<k>/
-        history.csv
-        epoch_pattern_log.csv
-        cartography.csv
-        sample_loss_epochs.npy
-        sample_index.npy
-        pattern_labels_train.npy
-        run_config.json
-        test_metrics.json
+Quy uoc dau ra:
+  - Baseline:
+      experiments/results/baseline/jena/<model>/seed<k>/
+  - PALF:
+      experiments/results/palf/jena/<config_tag>/<model>/seed<k>/
 """
 import argparse
+import json
 import os
 import sys
 from torch.utils.data import TensorDataset
 
+from palf.core.config import PalfConfig
 from palf.data.synthetic import prepare_data
 from palf.data.weather import prepare_weather_data
 from palf.models import resolve_model_name
@@ -31,7 +28,7 @@ def _slice_dataset(ds, n):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Chay baseline (random sampling) va ghi log quan sat Learning Dynamics."
+        description="Chay baseline hoac PALF va ghi log quan sat Learning Dynamics."
     )
     parser.add_argument(
         "--model", type=str, default="gru",
@@ -55,7 +52,48 @@ def parse_args(argv=None):
     )
     parser.add_argument(
         "--mode", type=str, default="baseline", choices=["baseline", "palf"],
-        help="Che do huan luyen. Chi cho phep 'baseline'; 'palf' bi chan o giai doan nay."
+        help="Che do huan luyen: 'baseline' hoac 'palf' (mac dinh: baseline)."
+    )
+    # Cac co PALF (Phase 5-6)
+    parser.add_argument(
+        "--policy", type=str, default="state", choices=["uniform", "loss", "state"],
+        help="Chinh sach PALF: uniform, loss, state (mac dinh: state)."
+    )
+    parser.add_argument(
+        "--budget-ratio", dest="budget_ratio", type=float, default=1.0,
+        help="Ty le ngan sach mau moi epoch so voi n_train (mac dinh: 1.0)."
+    )
+    parser.add_argument(
+        "--alpha", type=float, default=1.0,
+        help="Do manh phan ung trong so Policy (mac dinh: 1.0)."
+    )
+    parser.add_argument(
+        "--w-min", dest="w_min", type=float, default=0.25,
+        help="Trong so san w_min (mac dinh: 0.25)."
+    )
+    parser.add_argument(
+        "--w-max", dest="w_max", type=float, default=3.0,
+        help="Trong so tran w_max (mac dinh: 3.0)."
+    )
+    parser.add_argument(
+        "--ema-beta", dest="ema_beta", type=float, default=0.5,
+        help="He so lam muot EMA theo epoch (mac dinh: 0.5)."
+    )
+    parser.add_argument(
+        "--warmup", "--warmup-epochs", dest="warmup", type=int, default=3,
+        help="So epoch khoi dong (warm-up) giu w=1 (mac dinh: 3)."
+    )
+    parser.add_argument(
+        "--update-every", dest="update_every", type=int, default=1,
+        help="Cap nhat trong so Policy moi bao nhieu epoch (mac dinh: 1)."
+    )
+    parser.add_argument(
+        "--window", type=int, default=3,
+        help="Cua so epoch tinh velocity / instability (mac dinh: 3)."
+    )
+    parser.add_argument(
+        "--config-tag", dest="config_tag", type=str, default=None,
+        help="Tag thu muc cau hinh PALF (mac dinh: tu dong sinh tu PalfConfig, vd: state_b1.0_a1.0)."
     )
     parser.add_argument(
         "--dataset", "--data", dest="dataset", type=str, default="jena",
@@ -72,12 +110,12 @@ def parse_args(argv=None):
     )
     parser.add_argument("--csv-path", type=str, default=None, help="Duong dan file CSV Jena neu co san.")
     parser.add_argument(
-        "--out-root", type=str, default="experiments/results/baseline/jena",
-        help="Thu muc goc luu ket qua (mac dinh: experiments/results/baseline/jena)."
+        "--out-root", type=str, default=None,
+        help="Thu muc goc luu ket qua (mac dinh: experiments/results/baseline/jena hoac experiments/results/palf/jena)."
     )
     parser.add_argument(
         "--out-dir", type=str, default=None,
-        help="Thu muc dau ra cu the (neu khong truyen se dung <out-root>/<model>/seed<k>)."
+        help="Thu muc dau ra cu the (neu khong truyen se dung quy uoc theo mode)."
     )
     parser.add_argument(
         "--save-sample-losses",
@@ -99,14 +137,37 @@ def _parse_seed_list(args):
     return [int(s) for s in raw if s.strip()]
 
 
-def run_from_args(args):
-    if args.mode == "palf":
-        raise RuntimeError(
-            "Che do '--mode palf' bi chan o giai doan nay. Chi chay '--mode baseline'."
-        )
+def build_palf_config(args) -> PalfConfig:
+    return PalfConfig(
+        policy=args.policy,
+        warmup_epochs=args.warmup,
+        update_every=args.update_every,
+        alpha=args.alpha,
+        w_min=args.w_min,
+        w_max=args.w_max,
+        ema_beta=args.ema_beta,
+        budget_ratio=args.budget_ratio,
+        window=args.window,
+    )
 
+
+def run_from_args(args):
     canonical_model = resolve_model_name(args.model)
     model_lower = canonical_model.lower()
+
+    palf_cfg = build_palf_config(args) if args.mode == "palf" else None
+    config_tag = (
+        args.config_tag
+        if (args.mode == "palf" and args.config_tag)
+        else (palf_cfg.config_tag() if palf_cfg is not None else "baseline")
+    )
+
+    if args.out_root is not None:
+        out_root = args.out_root
+    elif args.mode == "palf":
+        out_root = os.path.join("experiments", "results", "palf", "jena")
+    else:
+        out_root = os.path.join("experiments", "results", "baseline", "jena")
 
     if args.dataset in ("jena", "weather"):
         train_ds, val_ds, test_ds, th, meta = prepare_weather_data(
@@ -138,21 +199,26 @@ def run_from_args(args):
             run_out_dir = args.out_dir
         elif args.out_dir is not None:
             run_out_dir = os.path.join(args.out_dir, f"seed{seed}")
+        elif args.mode == "palf":
+            run_out_dir = os.path.join(out_root, config_tag, model_lower, f"seed{seed}")
         else:
-            run_out_dir = os.path.join(args.out_root, model_lower, f"seed{seed}")
+            run_out_dir = os.path.join(out_root, model_lower, f"seed{seed}")
 
+        mode_label = f"PALF ({config_tag})" if args.mode == "palf" else "Baseline"
         print(
-            f"[Baseline] model={canonical_model} ({model_lower}) | seed={seed} | "
+            f"[{mode_label}] model={canonical_model} ({model_lower}) | seed={seed} | "
             f"epochs={args.epochs} | batch={args.batch} | lr={args.lr} | "
             f"device={args.device} | out_dir={run_out_dir}",
             flush=True,
         )
 
         def _on_epoch(row, total_ep):
+            ov_str = f" (ov={row.get('overhead_sec', 0.0):.3f}s)" if args.mode == "palf" else ""
             print(
                 f"  Epoch {row['epoch']:02d}/{total_ep:02d} | "
                 f"train_loss={row['train_loss']:.4f} | val_loss={row['val_loss']:.4f} | "
-                f"epoch_time={row['epoch_time_sec']:.2f}s | elapsed={row['elapsed']:.1f}s",
+                f"n={row['n_samples_processed']} | "
+                f"epoch_time={row['epoch_time_sec']:.2f}s{ov_str} | elapsed={row['elapsed']:.1f}s",
                 flush=True,
             )
 
@@ -165,7 +231,7 @@ def run_from_args(args):
             seed=seed,
             data=data_tuple,
             on_epoch=_on_epoch,
-            out_root=args.out_root,
+            out_root=out_root,
             out_dir=run_out_dir,
             use_seed_subdir=True,
             target_idx=target_idx,
@@ -173,7 +239,14 @@ def run_from_args(args):
             save_sample_losses=args.save_sample_losses,
             pattern_scheme=pattern_scheme,
             target_col=target_col,
+            mode=args.mode,
+            palf_config=palf_cfg,
         )
+        if args.mode == "palf" and args.config_tag:
+            res["run_config"]["config_tag"] = config_tag
+            with open(os.path.join(run_out_dir, "run_config.json"), "w", encoding="utf-8") as f:
+                json.dump(res["run_config"], f, indent=2)
+
         tm = res["test_metrics"]
         print(
             f"[Done] seed={seed} | best_epoch={res['best_epoch']} | "

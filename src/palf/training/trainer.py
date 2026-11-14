@@ -6,11 +6,15 @@ import time
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from palf.data.synthetic import prepare_data, PATTERNS
 from palf.models import build_model, count_params, resolve_model_name
+from palf.core.config import PalfConfig
 from palf.core.monitor import LearningDynamicsMonitor, build_probe, probe_grad_norms
+from palf.core.policy import PolicyEngine
+from palf.core.state import LearningStateTracker
+from palf.training.scheduler import AdaptiveScheduler
 
 
 def get_git_commit():
@@ -51,10 +55,16 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
                 seed=42, data=None, on_epoch=None, out_root="experiments/results",
                 target_idx=0, patience=None, pattern_names=None,
                 out_dir=None, use_seed_subdir=False, save_sample_losses=True,
-                pattern_scheme=None, target_col=None):
+                pattern_scheme=None, target_col=None,
+                mode="baseline", palf_config=None):
     """patience=None (mac dinh): chay du `epochs`, khong doi so voi truoc day.
     patience=so nguyen duong: dung som neu val_loss khong cai thien sau
-    `patience` epoch lien tiep, dung checkpoint tot nhat da luu."""
+    `patience` epoch lien tiep, dung checkpoint tot nhat da luu.
+    mode='baseline' (mac dinh): lay mau ngau nhien qua DataLoader(shuffle=True).
+    mode='palf': dieu phoi lay mau moi epoch qua Tracker -> Policy -> AdaptiveScheduler."""
+    if mode not in ("baseline", "palf"):
+        raise ValueError(f"mode='{mode}' khong hop le. Chon 'baseline' hoac 'palf'.")
+
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -106,6 +116,23 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
     )
     probe = build_probe(train, pat_train, pattern_names=pattern_names)
 
+    cfg = None
+    tracker = None
+    policy_engine = None
+    scheduler = None
+    current_decision = None
+    policy_rows = []
+
+    if mode == "palf":
+        cfg = palf_config if isinstance(palf_config, PalfConfig) else PalfConfig.from_dict(palf_config)
+        freqs = {
+            str(name): float((pat_train == p).sum() / max(1, len(pat_train)))
+            for p, name in enumerate(pattern_names)
+        }
+        tracker = LearningStateTracker(pattern_names, cfg)
+        policy_engine = PolicyEngine(pattern_names, freqs, cfg)
+        scheduler = AdaptiveScheduler(pat_train, pattern_names, cfg, seed=seed)
+
     history = []
     best = {"val": float("inf"), "state": None, "epoch": 0}
     t0 = time.time()
@@ -117,8 +144,20 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
         t_ep = time.time()
         model.train()
         monitor.start_epoch()
+        overhead_sec = 0.0
+
+        if mode == "palf":
+            t_ov0 = time.time()
+            epoch_indices = scheduler.plan_epoch(epoch, current_decision)
+            epoch_loader = DataLoader(
+                Subset(train, epoch_indices.tolist()), batch_size=batch, shuffle=False
+            )
+            overhead_sec += time.time() - t_ov0
+        else:
+            epoch_loader = loader
+
         total, count = 0.0, 0
-        for x, y, _, idx in loader:
+        for x, y, _, idx in epoch_loader:
             x, y = x.to(device), y.to(device)
             sample_loss = ((model(x) - y) ** 2).mean(1)
             loss = sample_loss.mean()
@@ -132,14 +171,41 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
         val_s = ((predict(model, val, device) - y_val) ** 2).mean(1)
         grads = probe_grad_norms(model, probe, device)
         monitor.end_epoch(epoch, val_s, grads)
+
+        if mode == "palf":
+            t_ov1 = time.time()
+            train_stats = monitor.get_last_train_stats()
+            state_dict = tracker.update(epoch, train_stats)
+            current_decision = policy_engine.decide(epoch, state_dict)
+            for p_name in pattern_names:
+                p_row = {
+                    "epoch": int(epoch),
+                    "pattern": str(p_name),
+                    "weight": float(current_decision.weights.get(p_name, 1.0)),
+                    "need_score": float(current_decision.info["need_score"].get(p_name, 0.0)),
+                    "n_seen": int(train_stats.get(p_name, {}).get("n_seen", 0)),
+                    "quota_planned": int(scheduler.last_quotas.get(p_name, 0)),
+                    "in_warmup": bool(current_decision.info["in_warmup"]),
+                    "updated": bool(current_decision.info["updated"]),
+                    "hit_floor": bool(current_decision.info["hit_floor"].get(p_name, False)),
+                    "hit_ceil": bool(current_decision.info["hit_ceil"].get(p_name, False)),
+                }
+                for sv in cfg.state_vars:
+                    p_row[sv] = float(state_dict.get(p_name, {}).get(sv, np.nan))
+                for zv, zval in current_decision.info["z_scores"].get(p_name, {}).items():
+                    p_row[f"z_{zv}"] = float(zval)
+                policy_rows.append(p_row)
+            overhead_sec += time.time() - t_ov1
+
         epoch_time_sec = time.time() - t_ep
 
         row = {
             "epoch": epoch,
-            "train_loss": total / count,
+            "train_loss": total / count if count > 0 else float("nan"),
             "val_loss": float(val_s.mean()),
             "grad_norm": float(np.mean(list(grads.values()))),
             "epoch_time_sec": float(epoch_time_sec),
+            "overhead_sec": float(overhead_sec),
             "n_samples_processed": int(count),
             "elapsed": time.time() - t0,
         }
@@ -200,6 +266,31 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
             "mae_degC": float(ae_orig[m].mean()),
         })
 
+    by_temp_sign = []
+    temp_sign_arr = meta.get("temp_sign", th_dict.get("temp_sign"))
+    spans_dict = meta.get("spans", {})
+    if temp_sign_arr is not None and "test" in spans_dict and "temp_anomaly" in pattern_names:
+        a_test, _ = spans_dict["test"]
+        ts_test = np.asarray(temp_sign_arr[a_test : a_test + len(test)])
+        p_ta = list(pattern_names).index("temp_anomaly")
+        for sub_name, sign_val in [("temp_anomaly_heat", 1), ("temp_anomaly_cold", -1)]:
+            m_sub = (pat_test == p_ta) & (ts_test == sign_val)
+            if m_sub.sum() == 0:
+                continue
+            s_mse_norm = float(se[m_sub].mean())
+            s_mse_degC = float(se_orig[m_sub].mean())
+            by_temp_sign.append({
+                "subpattern": sub_name,
+                "temp_sign": int(sign_val),
+                "n": int(m_sub.sum()),
+                "mse_norm": s_mse_norm,
+                "rmse_norm": float(np.sqrt(s_mse_norm)),
+                "mae_norm": float(ae[m_sub].mean()),
+                "mse_degC": s_mse_degC,
+                "rmse_degC": float(np.sqrt(s_mse_degC)),
+                "mae_degC": float(ae_orig[m_sub].mean()),
+            })
+
     examples = {}
     for p, name in enumerate(pattern_names):
         ids = np.where(pat_test == p)[0]
@@ -209,7 +300,13 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
         examples[name] = {"x": test.tensors[0][i, :, target_idx].numpy(), "y": y_test[i], "pred": pred[i]}
 
     if out_dir is None:
-        if use_seed_subdir:
+        if mode == "palf" and cfg is not None:
+            tag = cfg.config_tag()
+            if use_seed_subdir:
+                out_dir = os.path.join(out_root, tag, canonical_model.lower(), f"seed{seed}")
+            else:
+                out_dir = os.path.join(out_root, tag, model_name)
+        elif use_seed_subdir:
             out_dir = os.path.join(out_root, canonical_model.lower(), f"seed{seed}")
         else:
             out_dir = os.path.join(out_root, model_name)
@@ -218,8 +315,15 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
     hist_df.to_csv(os.path.join(out_dir, "history.csv"), index=False)
     monitor.save(out_dir, save_sample_losses=save_sample_losses)
 
+    policy_df = pd.DataFrame(policy_rows)
+    if mode == "palf":
+        policy_df.to_csv(os.path.join(out_dir, "policy_log.csv"), index=False)
+
     git_commit = get_git_commit()
     run_config = {
+        "mode": str(mode),
+        "palf_config": cfg.to_dict() if cfg is not None else None,
+        "config_tag": cfg.config_tag() if cfg is not None else "baseline",
         "model": canonical_model.lower(),
         "model_name": canonical_model,
         "seed": int(seed),
@@ -274,11 +378,14 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
         "best_val_loss": float(best["val"]),
         "n_test": int(len(test)),
         "by_pattern": by_pattern,
+        "by_temp_sign": by_temp_sign,
     }
     with open(os.path.join(out_dir, "test_metrics.json"), "w", encoding="utf-8") as f:
         json.dump(test_metrics, f, indent=2)
 
     return {
+        "mode": mode,
+        "palf_config": cfg.to_dict() if cfg is not None else None,
         "model_name": canonical_model,
         "params": count_params(model),
         "device": str(device),
@@ -289,6 +396,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
         "epochs_run": epochs_run,
         "history": hist_df,
         "pattern_log": pd.DataFrame(monitor.rows),
+        "policy_log": policy_df,
         "test": {
             "mse": mse_norm,
             "rmse": rmse_norm,
@@ -297,6 +405,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
             "rmse_degC": rmse_degC,
             "mae_degC": mae_degC,
             "by_pattern": pd.DataFrame(by_pattern),
+            "by_temp_sign": pd.DataFrame(by_temp_sign),
         },
         "run_config": run_config,
         "test_metrics": test_metrics,

@@ -1,3 +1,22 @@
+from .compare_runs import (
+    STANDARD_CONFIGS,
+    build_detail_and_pattern_tables,
+    collect_protocol_runs,
+    compute_val_targets_from_a0,
+    plot_comparison_figures,
+    run_comparison_protocol,
+    summarize_by_pattern,
+    summarize_overall_and_paired,
+    write_comparison_markdown,
+)
+from .demo_loader import (
+    compute_time_to_target,
+    compute_val_auc_samples,
+    discover_saved_runs,
+    load_saved_run,
+    summarize_palf_diagnostics,
+    summarize_side_by_side,
+)
 from .phase3_analysis import (
     CANDIDATE_VARS,
     block_permute_pattern_labels,

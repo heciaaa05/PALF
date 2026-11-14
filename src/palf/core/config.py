@@ -1,0 +1,85 @@
+"""Cau hinh trung tam PalfConfig cho Policy Engine va Adaptive Scheduler (Phase 5-6)."""
+from dataclasses import dataclass, field
+from typing import Dict, Tuple
+
+
+DEFAULT_STATE_VARS: Tuple[str, ...] = ("loss_ratio", "velocity", "instability")
+DEFAULT_STATE_SIGNS: Dict[str, float] = {
+    "loss_ratio": 1.0,
+    "velocity": 1.0,
+    "instability": 0.5,
+}
+
+
+@dataclass
+class PalfConfig:
+    policy: str = "state"        # "state" (PALF) | "loss" (doi chung B2) | "uniform" (baseline qua scheduler)
+    warmup_epochs: int = 3
+    update_every: int = 1        # cap nhat trong so moi bao nhieu epoch
+    alpha: float = 1.0           # do manh phan ung
+    w_min: float = 0.25          # trong so san (skip mem)
+    w_max: float = 3.0
+    ema_beta: float = 0.5        # lam muot trong so theo thoi gian
+    budget_ratio: float = 1.0    # rho: ty le so mau moi epoch so voi n_train
+    window: int = 3              # W: cua so epoch tinh xu huong/dao dong
+    state_vars: Tuple[str, ...] = DEFAULT_STATE_VARS
+    state_signs: Dict[str, float] = field(default_factory=lambda: dict(DEFAULT_STATE_SIGNS))
+    z_clip: float = 3.0          # gioi han tuyet doi cua z-score
+    min_floor_samples: int = 32  # san so mau toi thieu moi Pattern (Muc 6)
+    min_floor_frac: float = 0.05 # ty le san 5% * pi_p * n_e (Muc 6)
+
+    def __post_init__(self):
+        if self.policy not in ("state", "loss", "uniform"):
+            raise ValueError(f"policy='{self.policy}' khong hop le. Chon: 'state', 'loss', 'uniform'.")
+        if not (0.0 < self.budget_ratio <= 1.0):
+            raise ValueError(f"budget_ratio={self.budget_ratio} phai nam trong (0, 1].")
+        if self.w_min <= 0.0 or self.w_max < self.w_min:
+            raise ValueError(f"Khoang trong so [{self.w_min}, {self.w_max}] khong hop le.")
+        if not (0.0 <= self.ema_beta < 1.0):
+            raise ValueError(f"ema_beta={self.ema_beta} phai nam trong [0, 1).")
+        if self.window < 1:
+            raise ValueError(f"window={self.window} phai >= 1.")
+        if self.update_every < 1:
+            raise ValueError(f"update_every={self.update_every} phai >= 1.")
+        self.state_vars = tuple(self.state_vars)
+        if not self.state_signs:
+            self.state_signs = {v: DEFAULT_STATE_SIGNS.get(v, 1.0) for v in self.state_vars}
+        else:
+            self.state_signs = {str(k): float(v) for k, v in self.state_signs.items()}
+
+    def to_dict(self) -> dict:
+        return {
+            "policy": self.policy,
+            "warmup_epochs": int(self.warmup_epochs),
+            "update_every": int(self.update_every),
+            "alpha": float(self.alpha),
+            "w_min": float(self.w_min),
+            "w_max": float(self.w_max),
+            "ema_beta": float(self.ema_beta),
+            "budget_ratio": float(self.budget_ratio),
+            "window": int(self.window),
+            "state_vars": list(self.state_vars),
+            "state_signs": dict(self.state_signs),
+            "z_clip": float(self.z_clip),
+            "min_floor_samples": int(self.min_floor_samples),
+            "min_floor_frac": float(self.min_floor_frac),
+        }
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "PalfConfig":
+        if d is None:
+            return cls()
+        kwargs = dict(d)
+        if "state_vars" in kwargs and kwargs["state_vars"] is not None:
+            kwargs["state_vars"] = tuple(kwargs["state_vars"])
+        valid_keys = {f.name for f in cls.__dataclass_fields__.values()}
+        filtered = {k: v for k, v in kwargs.items() if k in valid_keys}
+        return cls(**filtered)
+
+    def config_tag(self) -> str:
+        if self.policy == "uniform":
+            return f"uniform_b{self.budget_ratio:.1f}"
+        base = f"{self.policy}_b{self.budget_ratio:.1f}_a{self.alpha:.1f}"
+        if abs(self.w_max - 3.0) > 1e-6:
+            return f"{base}_w{self.w_max:g}"
+        return base

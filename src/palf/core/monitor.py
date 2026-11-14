@@ -30,21 +30,40 @@ class LearningDynamicsMonitor:
 
     def end_epoch(self, epoch, val_losses, grad_norms):
         self.loss_hist.append(self._cur.copy())
+        self._last_train_stats = {}
         for p, name in enumerate(self.pattern_names):
             m = self.pat == p
             if m.sum() == 0:
                 continue
             v = self._cur[m]
+            n_seen = int(np.isfinite(v).sum())
+            if n_seen > 0:
+                loss_mean = float(np.nanmean(v))
+                loss_std = float(np.nanstd(v))
+            else:
+                loss_mean = float("nan")
+                loss_std = float("nan")
+            gn = float(grad_norms.get(name, np.nan))
+            self._last_train_stats[name] = {
+                "loss_mean": loss_mean,
+                "loss_std": loss_std,
+                "n_seen": n_seen,
+                "grad_norm": gn,
+            }
             vm = self.val_pat == p
             self.rows.append({
                 "epoch": epoch,
                 "pattern": name,
                 "n": int(m.sum()),
-                "train_loss_mean": float(np.nanmean(v)),
-                "train_loss_std": float(np.nanstd(v)),
+                "n_seen": n_seen,
+                "train_loss_mean": loss_mean,
+                "train_loss_std": loss_std,
                 "val_loss": float(val_losses[vm].mean()) if vm.any() else np.nan,
-                "grad_norm": grad_norms.get(name, np.nan),
+                "grad_norm": gn,
             })
+
+    def get_last_train_stats(self):
+        return dict(getattr(self, "_last_train_stats", {}))
 
     def save(self, out_dir, save_sample_losses=True):
         os.makedirs(out_dir, exist_ok=True)
@@ -52,11 +71,27 @@ class LearningDynamicsMonitor:
         df.to_csv(os.path.join(out_dir, "epoch_pattern_log.csv"), index=False)
         h = np.stack(self.loss_hist)  # (epochs, n)
         pattern_labels_train = np.asarray([self.pattern_names[int(p)] for p in self.pat], dtype=str)
+        finite_counts = np.isfinite(h).sum(axis=0)
+        mean_loss = np.zeros(self.n, dtype=np.float64)
+        std_loss = np.zeros(self.n, dtype=np.float64)
+        has_obs = finite_counts > 0
+        if has_obs.any():
+            mean_loss[has_obs] = np.nanmean(h[:, has_obs], axis=0)
+            std_loss[has_obs] = np.nanstd(h[:, has_obs], axis=0)
+        if (~has_obs).any():
+            for p_idx in range(len(self.pattern_names)):
+                m_unseen = (~has_obs) & (self.pat == p_idx)
+                if not m_unseen.any():
+                    continue
+                m_seen_pat = has_obs & (self.pat == p_idx)
+                fallback_mean = float(mean_loss[m_seen_pat].mean()) if m_seen_pat.any() else 0.0
+                mean_loss[m_unseen] = fallback_mean
+                std_loss[m_unseen] = 0.0
         carto = pd.DataFrame({
             "idx": self.sample_index,
             "pattern": pattern_labels_train,
-            "mean_loss": h.mean(0),
-            "std_loss": h.std(0),
+            "mean_loss": mean_loss,
+            "std_loss": std_loss,
         })
         carto.to_csv(os.path.join(out_dir, "cartography.csv"), index=False)
         if save_sample_losses:
