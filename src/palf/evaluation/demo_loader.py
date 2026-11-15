@@ -281,6 +281,7 @@ def summarize_palf_diagnostics(run_dict: Optional[dict]) -> dict:
 _CODE_MAP = {
     "baseline": "A0 (baseline)",
     "uniform_b1.0": "A0s (uniform_b1.0)",
+    "loss_shuffled_b1.0_a1.0": "A0w (loss_shuffled_b1.0_a1.0)",
     "uniform_b0.7": "A0r (uniform_b0.7)",
     "loss_b1.0_a1.0": "A1 (loss_b1.0_a1.0)",
     "predictive_b1.0_a0.5_w2": "A3 (predictive_b1.0_a0.5_w2 - không đạt G3)",

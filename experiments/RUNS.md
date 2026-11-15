@@ -77,3 +77,15 @@ Vì thư mục `experiments/results/baseline/` nằm trong `.gitignore` để gi
   Expand-Archive -Path C:\Users\Admin\Downloads\PALF_A0_baseline_backup_all4backbones.zip -DestinationPath . -Force
   .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru --seeds 0,1,2,3,4
   ```
+- **Lưu ý Prompt 10 (Sao lưu đa điểm):** Bên cạnh bản cục bộ `C:\Users\Admin\Downloads\PALF_A0_baseline_backup_all4backbones.zip`, cần tải tệp `.zip` này lên **Google Drive của nhóm hoặc GitHub Release (không commit vào lịch sử Git)** và bổ sung URL lưu trữ thứ hai ngay tại dòng này trước ngày 17/11.
+
+## 6. Kiểm định cuối 10 Seed trên GRU & Đối chứng Trọng số Xáo trộn `A0w` (Prompt 10)
+- **`A0w` (`loss_shuffled_b1.0_a1.0`, `seeds 0..9`):**
+  ```powershell
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy loss --budget-ratio 1.0 --alpha 1.0 --w-max 3.0 --shuffle-weights --config-tag loss_shuffled_b1.0_a1.0 --seeds 0,1,2,3,4,5,6,7,8,9 --epochs 30 --patience 5 --no-save-sample-losses
+  ```
+- **Mở rộng `A0s, A0r, A1, A3` (`seeds 5..9`):** Chạy cùng cờ như Mục 1/Mục 3 với `--seeds 5,6,7,8,9 --patience 5 --no-save-sample-losses`.
+- **Tổng hợp 10 seed + C1–C3 (Bonferroni $\alpha = 0.0167$, t ghép cặp & Wilcoxon):**
+  ```powershell
+  .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru --seeds 0,1,2,3,4,5,6,7,8,9
+  ```

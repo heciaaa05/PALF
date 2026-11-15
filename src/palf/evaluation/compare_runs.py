@@ -1,4 +1,5 @@
 """Giao thuc so sanh cong bang Baseline vs PALF (Spec Phase 5-6 v1 Muc 7, Prompt 7 Phan 4.4-4.5)."""
+import math
 import os
 from typing import Dict, List, Optional, Tuple
 import matplotlib
@@ -18,6 +19,7 @@ from .demo_loader import (
 STANDARD_CONFIGS = [
     {"code": "A0", "mode": "baseline", "policy": "uniform", "config_tag": "baseline", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform (DataLoader chuan, budget 1.0)"},
     {"code": "A0s", "mode": "palf", "policy": "uniform", "config_tag": "uniform_b1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform qua Scheduler (budget 1.0)"},
+    {"code": "A0w", "mode": "palf", "policy": "loss_shuffled", "config_tag": "loss_shuffled_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0s", "desc": "Doi chung A0w trong so xao tron (budget 1.0)"},
     {"code": "A0r", "mode": "palf", "policy": "uniform", "config_tag": "uniform_b0.7", "budget_ratio": 0.7, "ref_code": "A0s", "desc": "Baseline uniform qua Scheduler (budget 0.7)"},
     {"code": "A1", "mode": "palf", "policy": "loss", "config_tag": "loss_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0s", "desc": "Doi chung B2 chi dung loss_ratio (budget 1.0)"},
     {"code": "A3", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0s", "desc": "predictive (khong dat nguong G3, budget 1.0)"},
@@ -317,7 +319,7 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
             "n_seeds": int(n_seeds),
             "seeds": ",".join(str(s) for s in sorted(grp["seed"].tolist())),
             "n_reached_target": int(grp["reached_target"].sum()),
-            "stat_note": "trend_only (<5 seeds)" if n_seeds < 5 else "5_seeds_complete",
+            "stat_note": "trend_only (<5 seeds)" if n_seeds < 5 else f"{n_seeds}_seeds_complete",
         }
         for col in metrics:
             vals = grp[col].dropna().to_numpy(dtype=float)
@@ -340,6 +342,8 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
                 ref_candidates.append("A0")
             if code in ("A3", "A2", "E1", "E2") and "A1" in by_code and "A1" not in ref_candidates:
                 ref_candidates.append("A1")
+            if code == "A1" and "A0w" in by_code and "A0w" not in ref_candidates:
+                ref_candidates.append("A0w")
             if code in ("E1", "E2") and "A3" in by_code and "A3" not in ref_candidates:
                 ref_candidates.insert(0, "A3")
             for ref_c in ref_candidates:
@@ -363,10 +367,173 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
                         "diff_mean": float(diffs.mean()),
                         "diff_std": float(diffs.std(ddof=1)) if len(diffs) > 1 else 0.0,
                         "per_seed_diffs": "; ".join(f"s{s}:{float(g_cur.loc[s, col] - g_ref.loc[s, col]):+.4f}" for s in common_seeds if pd.notna(g_cur.loc[s, col]) and pd.notna(g_ref.loc[s, col])),
-                        "stat_note": "Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)" if len(diffs) < 5 else "Du 5 seed ghep cap",
+                        "stat_note": "Chi mo ta xu huong (khong tuyen bo y nghia thong ke voi <5 seed)" if len(diffs) < 5 else f"Du {len(diffs)} seed ghep cap",
                     })
 
     return summary_df, pd.DataFrame(paired_rows)
+
+
+def _betacf(a: float, b: float, x: float) -> float:
+    max_iter = 200
+    eps = 3.0e-14
+    fpmin = 1.0e-300
+    qab, qap, qam = a + b, a + 1.0, a - 1.0
+    c = 1.0
+    d = 1.0 - qab * x / qap
+    if abs(d) < fpmin:
+        d = fpmin
+    d = 1.0 / d
+    h = d
+    for m in range(1, max_iter + 1):
+        m2 = 2 * m
+        aa = m * (b - m) * x / ((qam + m2) * (a + m2))
+        d = 1.0 + aa * d
+        if abs(d) < fpmin:
+            d = fpmin
+        c = 1.0 + aa / c
+        if abs(c) < fpmin:
+            c = fpmin
+        d = 1.0 / d
+        h *= d * c
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2))
+        d = 1.0 + aa * d
+        if abs(d) < fpmin:
+            d = fpmin
+        c = 1.0 + aa / c
+        if abs(c) < fpmin:
+            c = fpmin
+        d = 1.0 / d
+        delta = d * c
+        h *= delta
+        if abs(delta - 1.0) < eps:
+            break
+    return h
+
+
+def _betainc(a: float, b: float, x: float) -> float:
+    if x <= 0.0:
+        return 0.0
+    if x >= 1.0:
+        return 1.0
+    bt = math.exp(
+        math.lgamma(a + b) - math.lgamma(a) - math.lgamma(b) + a * math.log(x) + b * math.log(1.0 - x)
+    )
+    if x < (a + 1.0) / (a + b + 2.0):
+        return bt * _betacf(a, b, x) / a
+    return 1.0 - bt * _betacf(b, a, 1.0 - x) / b
+
+
+def paired_ttest_two_sided(diffs: np.ndarray) -> Tuple[float, float]:
+    """Kiem dinh t ghep cap hai phia tren mang hieu so d = x - y."""
+    d = np.asarray(diffs, dtype=float)
+    d = d[np.isfinite(d)]
+    n = len(d)
+    if n < 2:
+        return float("nan"), float("nan")
+    mean_d = float(np.mean(d))
+    std_d = float(np.std(d, ddof=1))
+    if std_d < 1e-15:
+        if abs(mean_d) < 1e-15:
+            return 0.0, 1.0
+        return float("inf") if mean_d > 0 else float("-inf"), 0.0
+    t_stat = mean_d / (std_d / math.sqrt(n))
+    df = n - 1
+    x = df / (df + t_stat * t_stat)
+    p_val = float(_betainc(0.5 * df, 0.5, x))
+    return float(t_stat), min(1.0, max(0.0, p_val))
+
+
+def paired_wilcoxon_two_sided(diffs: np.ndarray) -> Tuple[float, float]:
+    """Kiem dinh Wilcoxon signed-rank hai phia (exact voi n_nz <= 16, xap xi chuan khi lon hon)."""
+    d = np.asarray(diffs, dtype=float)
+    d = d[np.isfinite(d)]
+    nz = d[np.abs(d) > 1e-15]
+    n = len(nz)
+    if n == 0:
+        return 0.0, 1.0
+    abs_nz = np.abs(nz)
+    ranks = pd.Series(abs_nz).rank(method="average").to_numpy(dtype=float)
+    w_plus = float(ranks[nz > 0].sum())
+    w_minus = float(ranks[nz < 0].sum())
+    w_stat = min(w_plus, w_minus)
+
+    if n <= 16:
+        # Exact distribution over all 2^n sign assignments (sum of subset ranks)
+        sums = np.array([0.0], dtype=float)
+        for r in ranks:
+            sums = np.concatenate([sums, sums + r])
+        total_r = float(ranks.sum())
+        w_obs_min = min(w_plus, total_r - w_plus)
+        # Two-sided p-value: P(min(W+, W-) <= w_obs_min)
+        mins = np.minimum(sums, total_r - sums)
+        p_val = float(np.mean(mins <= w_obs_min + 1e-12))
+        return float(w_stat), min(1.0, max(0.0, p_val))
+
+    mean_w = n * (n + 1) / 4.0
+    _, counts = np.unique(abs_nz, return_counts=True)
+    tie_corr = float(np.sum(counts ** 3 - counts))
+    var_w = (n * (n + 1) * (2 * n + 1) - 0.5 * tie_corr) / 24.0
+    if var_w <= 0:
+        return float(w_stat), 1.0
+    z = (abs(w_plus - mean_w) - 0.5) / math.sqrt(var_w)
+    p_val = math.erfc(max(0.0, z) / math.sqrt(2.0))
+    return float(w_stat), min(1.0, max(0.0, p_val))
+
+
+def compute_prompt10_primary_comparisons(detail_df: pd.DataFrame) -> pd.DataFrame:
+    """Tinh 3 doi chieu chinh C1 (A1-A0s), C2 (A3-A1), C3 (A1-A0w) voi Bonferroni (alpha=0.05/3=0.0167)."""
+    if detail_df.empty:
+        return pd.DataFrame()
+    specs = [
+        ("C1", "A1", "A0s", "Co cau theo loss (A1) vs lay deu qua Scheduler (A0s)"),
+        ("C2", "A3", "A1", "Learning State (A3) vs loss don thuan (A1)"),
+        ("C3", "A1", "A0w", "Thong tin Pattern (A1) vs trong so xao tron cung phan bo (A0w)"),
+    ]
+    rows = []
+    alpha_bonf = 0.05 / 3.0
+    for m, m_grp in detail_df.groupby("model", sort=False):
+        by_code = {c: g.set_index("seed") for c, g in m_grp.groupby("code", sort=False)}
+        for cid, cur_c, ref_c, desc in specs:
+            if cur_c not in by_code or ref_c not in by_code:
+                continue
+            g_cur = by_code[cur_c]
+            g_ref = by_code[ref_c]
+            common = sorted(set(g_cur.index).intersection(set(g_ref.index)))
+            if not common:
+                continue
+            diffs = (g_cur.loc[common, "mae_degC"] - g_ref.loc[common, "mae_degC"]).to_numpy(dtype=float)
+            valid_mask = np.isfinite(diffs)
+            diffs = diffs[valid_mask]
+            common_v = [s for s, ok in zip(common, valid_mask) if ok]
+            n = len(diffs)
+            if n == 0:
+                continue
+            t_stat, t_p = paired_ttest_two_sided(diffs)
+            w_stat, w_p = paired_wilcoxon_two_sided(diffs)
+            p_bonf = min(1.0, t_p * 3.0) if np.isfinite(t_p) else float("nan")
+            n_neg = int(np.sum(diffs < -1e-12))
+            n_pos = int(np.sum(diffs > 1e-12))
+            rows.append({
+                "model": m,
+                "comparison_id": cid,
+                "code": cur_c,
+                "ref_code": ref_c,
+                "description": desc,
+                "n_seeds": n,
+                "seeds": ",".join(str(s) for s in common_v),
+                "diff_mean": float(np.mean(diffs)),
+                "diff_std": float(np.std(diffs, ddof=1)) if n > 1 else 0.0,
+                "n_neg": n_neg,
+                "n_pos": n_pos,
+                "t_stat": float(t_stat),
+                "t_pvalue": float(t_p),
+                "p_bonferroni": float(p_bonf),
+                "bonferroni_significant": bool(np.isfinite(t_p) and t_p < alpha_bonf),
+                "wilcoxon_stat": float(w_stat),
+                "wilcoxon_pvalue": float(w_p),
+                "per_seed_diffs": "; ".join(f"s{s}:{d:+.4f}" for s, d in zip(common_v, diffs)),
+            })
+    return pd.DataFrame(rows)
 
 
 def summarize_by_pattern(pattern_df: pd.DataFrame) -> pd.DataFrame:
@@ -567,6 +734,54 @@ def write_comparison_markdown(
     ])
     lines.extend(_format_paired_table(paired_df))
 
+    if extra_sections and "primary_c123_df" in extra_sections and not extra_sections["primary_c123_df"].empty:
+        c_df = extra_sections["primary_c123_df"]
+        lines.extend([
+            "",
+            "### 3c. Ba đối chiếu chính Prompt 10 (Hiệu chỉnh Bonferroni: ngưỡng $\\alpha_{\\text{Bonf}} = 0.05 / 3 = 0.0167$, kiểm định t ghép cặp hai phía & Wilcoxon)",
+            "",
+            "| Backbone | Mã | Đối chiếu | Số seed | Hiệu MAE (Mean ± Std) (°C) | Số seed âm/dương | t-stat | p-value (t) | p-Bonferroni (×3) | Đạt ngưỡng 0.0167? | Wilcoxon (W, p) | Hiệu số từng seed |",
+            "|---|---|---|---:|---:|---:|---:|---:|---:|:---:|---|---|",
+        ])
+        for _, r in c_df.iterrows():
+            sig_str = "**Đạt**" if r["bonferroni_significant"] else "Không đạt"
+            lines.append(
+                f"| `{r['model'].upper()}` | **{r['comparison_id']}** | **{r['code']} − {r['ref_code']}** | {int(r['n_seeds'])} | "
+                f"{r['diff_mean']:+.4f} ± {r['diff_std']:.4f} | {int(r['n_neg'])}/{int(r['n_seeds'])} âm ({int(r['n_pos'])} dương) | "
+                f"{r['t_stat']:+.3f} | {r['t_pvalue']:.4f} | {r['p_bonferroni']:.4f} | {sig_str} | "
+                f"W={r['wilcoxon_stat']:.1f}, p={r['wilcoxon_pvalue']:.4f} | `{r['per_seed_diffs']}` |"
+            )
+        lines.append("")
+        # Ap dung dung bang cach doc dang ky truoc (Prompt 10)
+        by_cid = {r["comparison_id"]: r for _, r in c_df.iterrows()}
+        c1 = by_cid.get("C1")
+        c2 = by_cid.get("C2")
+        c3 = by_cid.get("C3")
+        lines.append("> **Kết luận theo đúng bảng Cách đọc đăng ký trước (Prompt 10):**")
+        if c1 is not None and c3 is not None:
+            if c3["bonferroni_significant"] and c3["diff_mean"] < 0:
+                lines.append(
+                    f"> - **C3 đạt (`p_t = {c3['t_pvalue']:.4f} < 0.0167`):** Với GRU trên Jena, ưu tiên Pattern theo loss (`A1`) giảm MAE nhỏ (`{-c3['diff_mean']:.4f} °C`) so với trọng số ngẫu nhiên cùng phân bố (`A0w`)."
+                )
+            elif c1["bonferroni_significant"] and c1["diff_mean"] < 0:
+                lines.append(
+                    f"> - **C3 không đạt (`p_t = {c3['t_pvalue']:.4f}`), C1 đạt (`p_t = {c1['t_pvalue']:.4f} < 0.0167`):** Cải thiện so với lấy đều (`A0s`) là do **đổi cơ cấu mẫu nói chung** (lặp mẫu / phân bổ lại tần suất batch), chưa chứng minh được do thông tin Pattern."
+                )
+            else:
+                lines.append(
+                    f"> - **C1 không đạt (`p_t = {c1['t_pvalue']:.4f} ≥ 0.0167`):** Không có hiệu ứng ổn định của trọng số theo loss (`A1`) so với lấy đều (`A0s`) ở 10 seed; hiệu ứng ở 5 seed là biến động ngẫu nhiên."
+                )
+        if c2 is not None:
+            c2_dir = c2["n_neg"] if c2["diff_mean"] < 0 else c2["n_pos"]
+            if c2["bonferroni_significant"] and c2_dir >= 8:
+                lines.append(
+                    f"> - **C2 đạt (`p_t = {c2['t_pvalue']:.4f} < 0.0167`, cùng dấu {c2_dir}/{int(c2['n_seeds'])} seed):** Learning State có khác biệt so với loss đơn thuần (cảnh báo: một bộ dữ liệu Jena, một backbone GRU)."
+                )
+            else:
+                lines.append(
+                    f"> - **C2 không đạt (`A3 − A1 = {c2['diff_mean']:+.4f} °C`, `p_t = {c2['t_pvalue']:.4f}`):** **Learning State đa biến không hơn loss đơn thuần.** (Kết quả chính của đề tài)."
+                )
+
     if extra_sections and "paired_3seeds_df" in extra_sections and not extra_sections["paired_3seeds_df"].empty:
         lines.extend([
             "",
@@ -679,12 +894,17 @@ def run_comparison_protocol(
     strict_validation: bool = True,
 ) -> dict:
     os.makedirs(out_dir, exist_ok=True)
+    effective_specs = config_specs
+    if effective_specs is None and len(seeds) > 5:
+        # Prompt 10: kiem dinh 10 seed tap trung vao A0, A0s, A0w, A0r, A1, A3 (A3r chi chay 5 seed 0..4)
+        effective_specs = [c for c in STANDARD_CONFIGS if c["code"] in ("A0", "A0s", "A0w", "A0r", "A1", "A3")]
+
     found_runs, missing_df = collect_protocol_runs(
         baseline_root=baseline_root,
         palf_root=palf_root,
         models=models,
         seeds=seeds,
-        config_specs=config_specs,
+        config_specs=effective_specs,
         strict_validation=strict_validation,
     )
     val_targets = compute_val_targets_from_a0(found_runs)
@@ -701,6 +921,11 @@ def run_comparison_protocol(
     saved_figs = plot_comparison_figures(found_runs, pat_summary_df, val_targets, out_dir)
 
     extra_sections: dict = {}
+    primary_c123_df = compute_prompt10_primary_comparisons(detail_df)
+    if not primary_c123_df.empty:
+        extra_sections["primary_c123_df"] = primary_c123_df
+        primary_c123_df.to_csv(os.path.join(out_dir, "primary_comparisons_prompt10.csv"), index=False)
+
     if len(seeds) >= 5 and set((0, 1, 2)).issubset(set(seeds)):
         det_3 = detail_df[detail_df["seed"].isin([0, 1, 2])].copy()
         sum_3, pair_3 = summarize_overall_and_paired(det_3)
@@ -767,6 +992,7 @@ def run_comparison_protocol(
         "summary_df": summary_df,
         "pat_summary_df": pat_summary_df,
         "paired_df": paired_df,
+        "primary_c123_df": primary_c123_df,
         "missing_df": missing_df,
         "saved_figs": saved_figs,
         "report_path": report_path,

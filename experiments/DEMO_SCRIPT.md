@@ -10,7 +10,7 @@
 
 > *Mô hình dự báo chuỗi thời gian thường được huấn luyện bằng cách lấy mẫu ngẫu nhiên, coi mọi đoạn dữ liệu như nhau. PALF thêm một lớp điều phối bên ngoài mô hình: nó theo dõi mô hình đang học từng kiểu đoạn dữ liệu (Pattern) như thế nào và điều chỉnh việc lấy mẫu theo đó, không cần sửa kiến trúc mô hình.*
 
-Đó là điều **chắc chắn** nói được: framework hoạt động, chạy end-to-end trên dữ liệu thật (Jena Climate) với nhiều kiến trúc (GRU, TCN, Transformer, PatchTST). Việc nó **cải thiện** kết quả dự báo hay không là phần thực nghiệm, được báo cáo trung thực theo đúng quy tắc tiền đăng ký (Nhánh Y).
+Đó là điều **chắc chắn** nói được: framework hoạt động, chạy end-to-end trên dữ liệu thật (Jena Climate). *(Lưu ý phạm vi kiến trúc: baseline `A0` đã chạy đủ 4 backbone `GRU, TCN, Transformer, PatchTST`, còn PALF mới chạy thực nghiệm trên **`GRU` và `TCN`** — và trên `TCN`, `best_epoch = 3` trùng đúng điểm kết thúc warm-up ở 2/3 seed nên Policy chưa kịp tác động).* Việc PALF **cải thiện** kết quả dự báo hay không là phần thực nghiệm, được báo cáo trung thực theo đúng quy tắc tiền đăng ký (Prompt 10: kiểm định 10 seed trên GRU kèm đối chứng trọng số xáo trộn `A0w`).
 
 ---
 
@@ -83,26 +83,37 @@
 
 ## 4. Nội dung Slide 5 & Slide 6 (Bản 1 — Số liệu thật đã đóng băng)
 
-### Slide 5 — Kết quả thực nghiệm: 5 Seed trên GRU (có `A0s`) & Nhân bản 3 Seed trên TCN (Nhánh Y)
+### Slide 5 — Kết quả thực nghiệm: Kiểm định 10 Seed trên GRU (`A0, A0s, A0w, A0r, A1, A3`) & TCN (`3 seed`)
 
-> **Câu kết luận chính trên Slide 5 (Nhánh Y):**
-> **"PALF chạy end-to-end, so sánh công bằng; trong điều kiện này chưa tách được khỏi việc chỉ giảm mẫu/đổi đường lấy mẫu."**
+> **Kết luận chính thức sau kiểm định 10 seed trên GRU (chọn đúng theo quy tắc tiền đăng ký Prompt 10 — ngưỡng Bonferroni $\alpha = 0.05/3 = 0.0167$):**
+> - **Đối với `C1 (A1 - A0s)` & `C3 (A1 - A0w)` (Phương án 3 — `C1` không đạt ngưỡng $p < 0.0167$):** *"Không có hiệu ứng ổn định của trọng số theo loss ở 10 seed (`C1: -0.0067 ± 0.0191 °C`, `6/10` âm, `p_t = 0.2974`, `p_Bonf = 0.8922`); hiệu ứng ở 5 seed đầu (`-0.0211 °C`) là biến động ngẫu nhiên giữa các seed. Hơn nữa, `A1` gần như trùng khít đối chứng trọng số ngẫu nhiên `A0w` (`C3: -0.0027 ± 0.0214 °C`, `5/10` âm, `p_t = 0.6983`, `p_Bonf = 1.0000`, Wilcoxon `p = 1.0000`)."*
+> - **Đối với `C2 (A3 - A1)` (`p = 0.2500 >= 0.0167`, `5/10` âm):** *"Learning State đa biến (`A3`, `+0.0075 ± 0.0192 °C` so với `A1`) không hơn loss đơn thuần."* (Kết quả chính của đề tài, nói thẳng).
 >
-> **Lời thoại nguyên văn theo Nhánh Y (Mục 4 kịch bản gốc):**
-> *"Trong điều kiện của chúng tôi, lớp điều phối theo Pattern không tạo khác biệt vượt biến động giữa các seed và chưa tách được khỏi việc chỉ giảm mẫu/đổi đường lấy mẫu. Kết quả này đáng giá vì: (i) framework hoạt động và chạy end-to-end trên nhiều kiến trúc; (ii) chúng tôi đã loại trừ các so sánh không công bằng bằng hệ đối chứng đầy đủ (`A0s` cùng đường mã Scheduler ở ngân sách `1.0` và `A0r` ở ngân sách `0.7`); (iii) với dữ liệu Jena và 4 nhãn Pattern hiện tại, việc dùng Learning State đa biến chưa thêm giá trị dự đoán so với loss đơn thuần. Hướng tiếp theo: áp dụng trên dữ liệu có các sự kiện thời tiết cực đoan khác biệt mạnh hơn và tách riêng dị thường nóng/lạnh."*
+> **Lời thoại nguyên văn theo Nhánh Y (đã cập nhật 10 seed & phạm vi backbone):**
+> *"Trong điều kiện của chúng tôi, lớp điều phối theo Pattern không tạo khác biệt vượt biến động giữa các seed (`10 seed` GRU: `C1: p_t = 0.2974`, `C3: p_t = 0.6983`) và chưa tách được khỏi việc lấy mẫu đều hoặc trọng số ngẫu nhiên. Kết quả này đáng giá vì: (i) framework hoạt động và chạy end-to-end trên các kiến trúc đã thử nghiệm (`GRU` và `TCN`); (ii) chúng tôi đã loại trừ các so sánh không công bằng bằng hệ đối chứng đầy đủ (`A0s` cùng đường mã Scheduler ở ngân sách `1.0`, `A0w` trọng số ngẫu nhiên cùng phân bố, và `A0r` ở ngân sách `0.7`); (iii) với dữ liệu Jena và 4 nhãn Pattern hiện tại, việc dùng Learning State đa biến (`A3`) chưa thêm giá trị dự đoán so với loss đơn thuần (`C2: p_t = 0.2500`). Hướng tiếp theo: áp dụng trên dữ liệu có các sự kiện thời tiết cực đoan khác biệt mạnh hơn và tách riêng dị thường nóng/lạnh."*
 >
-> **Câu tuyệt đối không nói:** Không nói *"PALF tốt hơn"* khi chưa tách khỏi `A0r`/`A1`; không nói *"PALF hiệu quả trên mọi mô hình"*; không nói *"Learning State dự đoán được mô hình cần học gì"* (vì kiểm định G3 sau kiểm soát epoch chỉ đạt ở 2/4 backbone và lui về phương án dự phòng).
+> **Câu tuyệt đối không nói:** Không nói *"PALF tốt hơn"* khi `C1, C2, C3` đều không đạt ngưỡng Bonferroni; không nói *"PALF hiệu quả trên mọi mô hình"*; không nói *"Learning State dự đoán được mô hình cần học gì"* (vì kiểm định G3 sau kiểm soát epoch chỉ đạt ở 2/4 backbone và lui về phương án dự phòng).
 
-#### Bảng 5A — Kết quả 5 Seed trên Backbone chính GRU (`seeds 0, 1, 2, 3, 4`)
+#### Bảng 5A — Kết quả Kiểm định 10 Seed trên Backbone chính GRU (`seeds 0..9`)
 
-| Mã | Cấu hình (`config_tag`) | Cơ chế lấy mẫu | Test MAE (°C) | Test RMSE (°C) | Best Val Loss | Best Epoch | Hiệu MAE so với `A0s` (°C) | Hiệu MAE so với `A0` (°C) |
-|---|---|---|---:|---:|---:|---:|---:|---:|
-| **A0** | `baseline` | `DataLoader(shuffle=True)`, budget `1.0` | `1.7836 ± 0.0255` | `2.3446 ± 0.0326` | `0.0809 ± 0.0017` | `5.6` | `+0.0007 ± 0.0164` | `0.0000` (gốc) |
-| **A0s** | `uniform_b1.0` | `AdaptiveScheduler` đều, budget `1.0` (đối chứng chính) | **`1.7829 ± 0.0161`** | `2.3430 ± 0.0190` | `0.0809 ± 0.0012` | `5.4` | `0.0000` (đối chứng) | **`-0.0007 ± 0.0164`** |
-| **A0r** | `uniform_b0.7` | `AdaptiveScheduler` đều, giảm 30% mẫu (`b=0.7`) | `1.7678 ± 0.0118` | `2.3331 ± 0.0148` | `0.0805 ± 0.0009` | `6.4` | `-0.0151 ± 0.0079` | `-0.0158 ± 0.0164` |
-| **A1** | `loss_b1.0_a1.0` | Chỉ dùng `loss_ratio` (`b=1.0, α=1.0, w_max=3.0`) | `1.7618 ± 0.0238` | `2.3321 ± 0.0312` | `0.0811 ± 0.0019` | `5.8` | `-0.0211 ± 0.0142` | `-0.0218 ± 0.0131` |
-| **A3** | `predictive_b1.0_a0.5_w2` | `predictive` (không đạt G3, `b=1.0, α=0.5, w_max=2.0`) | `1.7682 ± 0.0124` | `2.3308 ± 0.0140` | `0.0801 ± 0.0015` | `5.2` | `-0.0148 ± 0.0118` | `-0.0155 ± 0.0140` |
-| **A3r** | `predictive_b0.7_a0.5_w2` | `predictive` (không đạt G3, `b=0.7, α=0.5, w_max=2.0`) | `1.7699 ± 0.0118` | `2.3323 ± 0.0120` | `0.0799 ± 0.0013` | `6.2` | `+0.0021 ± 0.0043` *(vs A0r)* | `-0.0138 ± 0.0194` |
+| Mã | Cấu hình (`config_tag`) | Cơ chế lấy mẫu | Test MAE (°C) ↓ | Test RMSE (°C) ↓ | Best Val Loss ↓ | Best Epoch | Hiệu MAE vs `A0s` (°C) |
+|---|---|---|---:|---:|---:|---:|---:|
+| **A0** | `baseline` | `DataLoader(shuffle=True)`, budget `1.0` | `1.7701 ± 0.0240` | `2.3329 ± 0.0265` | `0.0804 ± 0.0014` | `5.6` | — |
+| **A0s** | `uniform_b1.0` | `AdaptiveScheduler` đều, budget `1.0` (đối chứng chính) | `1.7685 ± 0.0190` | `2.3340 ± 0.0186` | `0.0807 ± 0.0010` | `5.4` | `0.0000` *(vs `A0`: `-0.0015 ± 0.0143`)* |
+| **A0w** | `loss_shuffled_b1.0_a1.0` | Hoán vị ngẫu nhiên trọng số `loss` theo epoch (`b=1.0`) | `1.7646 ± 0.0291` | `2.3309 ± 0.0257` | `0.0808 ± 0.0015` | `5.3` | `-0.0040 ± 0.0243` |
+| **A0r** | `uniform_b0.7` | `AdaptiveScheduler` đều, giảm 30% mẫu (`b=0.7`) | `1.7646 ± 0.0109` | `2.3328 ± 0.0109` | `0.0804 ± 0.0007` | `7.6` | `-0.0040 ± 0.0145` |
+| **A1** | `loss_b1.0_a1.0` | Chỉ dùng `loss_ratio` (`b=1.0, α=1.0, w_max=3.0`) | `1.7618 ± 0.0164` | `2.3304 ± 0.0221` | `0.0805 ± 0.0015` | `6.0` | `-0.0067 ± 0.0191` |
+| **A3** | `predictive_b1.0_a0.5_w2` | `predictive` (không đạt G3, `b=1.0, α=0.5, w_max=2.0`) | `1.7693 ± 0.0185` | `2.3340 ± 0.0182` | `0.0802 ± 0.0015` | `5.4` | `+0.0008 ± 0.0248` |
+
+*(Ghi chú: `A3r` chỉ chạy 5 seed `0..4` ở Prompt 9 với MAE `1.7699 ± 0.0118 °C`, hiệu `A3r - A0r = +0.0021 ± 0.0043 °C`.)*
+
+#### Bảng 5A-bis — 3 Phép so sánh chính (`C1–C3`, 10 seed GRU, Bonferroni $\alpha = 0.05/3 = 0.0167$)
+
+| Mã | Phép so sánh | Mean ± SD (°C) | Dấu (Âm / Dương) | Paired `t` (`p_t`) | `p_Bonf` | Wilcoxon `W` (`p`) | Kết luận |
+|---|---|---:|:---:|---:|---:|---:|---|
+| **C1** | `A1 - A0s` *(loss vs đều)* | `-0.0067 ± 0.0191` | `6 / 4` | `-1.106` (`0.2974`) | `0.8922` | `19.0` (`0.4316`) | Không đạt |
+| **C2** | `A3 - A1` *(Learning State vs loss)* | `+0.0075 ± 0.0192` | `5 / 5` | `+1.230` (`0.2500`) | `0.7501` | `19.0` (`0.4316`) | Không đạt |
+| **C3** | `A1 - A0w` *(loss vs trọng số ngẫu nhiên)* | `-0.0027 ± 0.0214` | `5 / 5` | `-0.400` (`0.6983`) | `1.0000` | `27.0` (`1.0000`) | Không đạt |
 
 - **Cách đọc đăng ký trước đối với `A0s` (Mục 9.1):**
   1. **`A0s ≈ A0` (`A0s - A0 = -0.0007 ± 0.0164 °C`, nhỏ hơn nhiều độ lệch chuẩn giữa các seed `0.0161–0.0255 °C`):** Khi lấy đủ 100% mẫu mỗi epoch đúng 1 lần không hoàn lại, đường mã `AdaptiveScheduler` (`A0s`) cho kết quả trùng khít với `DataLoader` chuẩn (`A0`).

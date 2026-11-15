@@ -143,7 +143,7 @@ def test_compare_runs_known_values_and_missing_configs(tmp_path):
     assert "temp_anomaly_cold" in set(pat_sum["pattern"])
 
     miss_df = res["missing_df"]
-    assert set(miss_df["code"]) == {"A0s", "A1", "A3"}
+    assert set(miss_df["code"]) == {"A0s", "A0w", "A1", "A3"}
     assert (miss_df["status"] == "MISSING_ALL").all()
 
 
@@ -201,3 +201,33 @@ def test_compare_runs_rejects_mismatched_seed_list(tmp_path):
             models=("gru",),
             seeds=(0, 1, 2),
         )
+
+
+def test_prompt10_primary_comparisons_ttest_wilcoxon_bonferroni():
+    import pandas as pd
+    from palf.evaluation.compare_runs import (
+        compute_prompt10_primary_comparisons,
+        paired_ttest_two_sided,
+        paired_wilcoxon_two_sided,
+    )
+
+    # Known paired differences
+    diffs = np.array([-0.02, -0.03, -0.01, -0.025, -0.015, -0.022, -0.018, -0.024, -0.019, -0.021])
+    t_s, t_p = paired_ttest_two_sided(diffs)
+    w_s, w_p = paired_wilcoxon_two_sided(diffs)
+    assert t_s < -8.0
+    assert t_p < 1e-5
+    assert w_s == 0.0
+    assert w_p == pytest.approx(2.0 / 1024.0)  # Exact 2-sided Wilcoxon for n=10 with all same sign
+
+    rows = []
+    for s in range(10):
+        rows.append({"model": "gru", "code": "A0s", "seed": s, "mae_degC": 1.80})
+        rows.append({"model": "gru", "code": "A0w", "seed": s, "mae_degC": 1.79})
+        rows.append({"model": "gru", "code": "A1", "seed": s, "mae_degC": 1.80 + diffs[s]})
+        rows.append({"model": "gru", "code": "A3", "seed": s, "mae_degC": 1.80 + diffs[s] + 0.005})
+    c_df = compute_prompt10_primary_comparisons(pd.DataFrame(rows)).set_index("comparison_id")
+    assert set(c_df.index) == {"C1", "C2", "C3"}
+    assert bool(c_df.loc["C1", "bonferroni_significant"]) is True
+    assert bool(c_df.loc["C3", "bonferroni_significant"]) is True
+    assert c_df.loc["C1", "p_bonferroni"] == pytest.approx(min(1.0, 3.0 * c_df.loc["C1", "t_pvalue"]))

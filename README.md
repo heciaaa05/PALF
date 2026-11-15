@@ -135,25 +135,30 @@ PALF/
 
 ---
 
-## 5. Kết quả Thực nghiệm trên Tập Jena Climate (`GRU` 5 Seed & `TCN` 3 Seed — Prompt 8 & Prompt 9)
+## 5. Kết quả Thực nghiệm trên Tập Jena Climate (`GRU` 10 Seed & `TCN` 3 Seed — Prompt 10)
 
 Bảng tổng hợp từ [`experiments/analysis/comparison/comparison_report.md`](file:///d:/Github/PALF/experiments/analysis/comparison/comparison_report.md) (`n_train = 48,981`, `n_val = 10,377`, `n_test = 10,377`, `epochs = 30`, `batch = 128`, `lr = 1e-3`):
 
-> **Nhận xét quan trọng (kết luận trung thực — Nhánh Y):**
-> 1. **Đối chứng `A0s` (`uniform_b1.0` qua `AdaptiveScheduler`, Mục 9.1):** Trên 5 seed GRU, `A0s` (`1.7829 ± 0.0161 °C`) trùng khít với `A0` (`1.7836 ± 0.0255 °C`; hiệu ghép cặp `A0s - A0 = -0.0007 ± 0.0164 °C` $\Rightarrow$ **`A0s ≈ A0`**). So với `A0s`, cả `A1` (`-0.0211 ± 0.0142 °C`), `A3` (`-0.0148 ± 0.0118 °C`) và đối chứng giảm mẫu ngẫu nhiên `A0r` (`-0.0151 ± 0.0079 °C`) giảm nhẹ tương đương nhau, nhưng `A3 - A1 = +0.0063 ± 0.0148 °C` và `A3r - A0r = +0.0021 ± 0.0043 °C`: phần chênh lệch này chưa tách được khỏi việc chỉ giảm mẫu / lấy mẫu có hoàn lại sau warmup và không có bằng chứng cho trọng số theo Pattern.
-> 2. **Nhân bản trên TCN (`seeds 0, 1, 2` — Mục 9.2):** TCN hội tụ sớm hơn cả GRU (`best_epoch = 3.0–3.7`). Ở `seed 0, 2`, điểm `val_loss` tốt nhất đạt ngay tại `epoch 3` (cuối `warmup_epochs = 3`); trên 3 seed, `A0 = 1.7739 ± 0.0065 °C`, `A0s = 1.7659 ± 0.0089 °C`, `A1 = 1.7714 ± 0.0113 °C`, `A3 = 1.7802 ± 0.0241 °C`.
+> **Nhận xét quan trọng (kết luận trung thực theo quy tắc tiền đăng ký Prompt 10 — Nhánh Y):**
+> 1. **Kiểm định 10 seed trên GRU (`seeds 0..9`, ngưỡng Bonferroni $\alpha = 0.05/3 = 0.0167$):**
+>    - **`C1` (`A1 - A0s`, loss vs Scheduler đều):** `-0.0067 ± 0.0191 °C` (`6/10` âm, `t = -1.106`, `p_t = 0.2974`, `p_Bonf = 0.8922`, Wilcoxon `W = 19.0, p = 0.4316`) $\Rightarrow$ **Không có hiệu ứng ổn định của trọng số theo loss ở 10 seed; hiệu ứng nhỏ ở 5 seed đầu (`-0.0211 °C`) là biến động ngẫu nhiên giữa các seed.**
+>    - **`C3` (`A1 - A0w`, loss vs trọng số hoán vị ngẫu nhiên):** `-0.0027 ± 0.0214 °C` (`5/10` âm, `t = -0.400`, `p_t = 0.6983`, `p_Bonf = 1.0000`, Wilcoxon `W = 27.0, p = 1.0000`) $\Rightarrow$ `A1` (`1.7618 ± 0.0164 °C`) trùng khít `A0w` (`1.7646 ± 0.0291 °C`), không tách được khỏi phân bổ trọng số ngẫu nhiên.
+>    - **`C2` (`A3 - A1`, Learning State vs loss):** `+0.0075 ± 0.0192 °C` (`5/10` âm, `t = +1.230`, `p_t = 0.2500`, `p_Bonf = 0.7501`, Wilcoxon `W = 19.0, p = 0.4316`) $\Rightarrow$ **Learning State đa biến (`A3`) không hơn loss đơn thuần.**
+> 2. **Nhân bản trên TCN (`seeds 0, 1, 2` — Prompt 9):** TCN hội tụ sớm hơn cả GRU (`best_epoch = 3.0–3.7`). Ở `seed 0, 2`, điểm `val_loss` tốt nhất đạt ngay tại `epoch 3` (cuối `warmup_epochs = 3`); trên 3 seed, `A0 = 1.7739 ± 0.0065 °C`, `A0s = 1.7659 ± 0.0089 °C`, `A1 = 1.7714 ± 0.0113 °C`, `A3 = 1.7802 ± 0.0241 °C`.
 > 3. **Định danh G3 & Hai thí nghiệm khám phá (`E1, E2`):** Tiêu chí G3 cho kết quả **"lui về phương án dự phòng"**, nên `A3` và `A3r` được gọi đúng tên là **`predictive (không đạt ngưỡng G3)`**. Hai thí nghiệm khám phá `E1` (`warmup_epochs=1`: `1.7873 ± 0.0247 °C`) và `E2` (`policy=loss_abs`: `1.7756 ± 0.0224 °C`, trong đó `temp_anomaly` vẫn ở mức `1.9911 °C`) đều không cải thiện so với đối chứng.
 
-### 5.1. Bảng 5 Seed hoàn chỉnh trên GRU (`seeds 0, 1, 2, 3, 4`) & Trung bình 4 Seed độc lập (`seeds 1..4`)
+### 5.1. Bảng 10 Seed trên GRU (`seeds 0..9`) & 3 Phép so sánh chính (`C1–C3`)
 
-| Mã | Cấu hình (`config_tag`) | Test MAE (°C) 5 seed (`0..4`) ↓ | Test MAE (°C) 4 seed (`1..4`) ↓ | Test RMSE (°C) 5 seed ↓ | Best Val Loss 5 seed ↓ | Best Epoch | MAE `pressure_drop` (°C) ↓ | MAE `temp_anomaly_cold` (°C) ↓ |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`A0`** | `baseline` (`DataLoader` chuẩn, `b=1.0`) | `1.7836 ± 0.0255` | `1.7872 ± 0.0280` | `2.3446 ± 0.0326` | `0.0809 ± 0.0017` | `5.6` | `1.7223 ± 0.0537` | `2.5131 ± 0.2079` *(3s)* |
-| **`A0s`** | `uniform_b1.0` (`Scheduler` đều, `b=1.0`) | `1.7829 ± 0.0161` | `1.7807 ± 0.0177` | `2.3430 ± 0.0190` | `0.0809 ± 0.0012` | `5.4` | `1.6951 ± 0.0434` | **`2.3924 ± 0.1319`** |
-| **`A0r`** | `uniform_b0.7` (`Scheduler` đều, `b=0.7`) | `1.7678 ± 0.0118` | `1.7683 ± 0.0135` | `2.3331 ± 0.0148` | `0.0805 ± 0.0009` | `6.4` | `1.6969 ± 0.0333` | `2.5505 ± 0.1456` |
-| **`A1`** | `loss_b1.0_a1.0` (`loss_only, b=1.0`) | **`1.7618 ± 0.0238`** | **`1.7621 ± 0.0275`** | `2.3321 ± 0.0312` | `0.0811 ± 0.0019` | `5.8` | `1.6893 ± 0.0313` | `2.5612 ± 0.2162` |
-| **`A3`** | `predictive_b1.0_a0.5_w2` *(không đạt ngưỡng G3)* | `1.7682 ± 0.0124` | `1.7707 ± 0.0128` | **`2.3308 ± 0.0140`** | `0.0801 ± 0.0015` | `5.2` | `1.6889 ± 0.0339` | `2.4060 ± 0.0622` |
-| **`A3r`** | `predictive_b0.7_a0.5_w2` *(không đạt ngưỡng G3)* | `1.7699 ± 0.0118` | `1.7709 ± 0.0134` | `2.3323 ± 0.0120` | **`0.0799 ± 0.0013`** | `6.2` | **`1.6855 ± 0.0283`** | `2.4016 ± 0.0709` |
+| Mã | Cấu hình (`config_tag`) | Test MAE (°C) 10 seed (`0..9`) ↓ | Test RMSE (°C) 10 seed ↓ | Best Val Loss 10 seed ↓ | Best Epoch | Hiệu MAE vs `A0s` (°C) |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **`A0`** | `baseline` (`DataLoader` chuẩn, `b=1.0`) | `1.7701 ± 0.0240` | `2.3329 ± 0.0265` | `0.0804 ± 0.0014` | `5.6` | — |
+| **`A0s`** | `uniform_b1.0` (`Scheduler` đều, `b=1.0`) | `1.7685 ± 0.0190` | `2.3340 ± 0.0186` | `0.0807 ± 0.0010` | `5.4` | `0.0000` *(vs `A0`: `-0.0015 ± 0.0143`)* |
+| **`A0w`** | `loss_shuffled_b1.0_a1.0` (trọng số ngẫu nhiên) | `1.7646 ± 0.0291` | `2.3309 ± 0.0257` | `0.0808 ± 0.0015` | `5.3` | `-0.0040 ± 0.0243` |
+| **`A0r`** | `uniform_b0.7` (`Scheduler` đều, `b=0.7`) | `1.7646 ± 0.0109` | `2.3328 ± 0.0109` | `0.0804 ± 0.0007` | `7.6` | `-0.0040 ± 0.0145` |
+| **`A1`** | `loss_b1.0_a1.0` (`loss_only, b=1.0`) | `1.7618 ± 0.0164` | `2.3304 ± 0.0221` | `0.0805 ± 0.0015` | `6.0` | `-0.0067 ± 0.0191` |
+| **`A3`** | `predictive_b1.0_a0.5_w2` *(không đạt ngưỡng G3)* | `1.7693 ± 0.0185` | `2.3340 ± 0.0182` | `0.0802 ± 0.0015` | `5.4` | `+0.0008 ± 0.0248` |
+
+*(Chi tiết 3 phép so sánh chính được xuất tại [`experiments/analysis/comparison/primary_comparisons_prompt10.csv`](file:///d:/Github/PALF/experiments/analysis/comparison/primary_comparisons_prompt10.csv): `C1 (A1-A0s): p_t=0.2974`, `C2 (A3-A1): p_t=0.2500`, `C3 (A1-A0w): p_t=0.6983` — đều không đạt ngưỡng Bonferroni `0.0167`.)*
 
 ### 5.2. Bảng 3 Seed gốc trên GRU (`seeds 0, 1, 2`) & Hai thí nghiệm khám phá (`E1`, `E2`)
 
