@@ -6,7 +6,7 @@ CANH BAO (Prompt 7 Buoc 3b):
 - Bang so sanh chinh su dung `policy="predictive"` (doc he so hoi quy tu `predictive_coef_path`).
 """
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 
 DEFAULT_STATE_VARS: Tuple[str, ...] = ("loss_ratio", "velocity", "instability")
@@ -39,12 +39,21 @@ class PalfConfig:
     z_clip: float = 3.0          # gioi han tuyet doi cua z-score
     min_floor_samples: int = 32  # san so mau toi thieu moi Pattern (Muc 6)
     min_floor_frac: float = 0.05 # ty le san 5% * pi_p * n_e (Muc 6)
+    # Prompt 10 — Doi chung A0w "trong so xao tron": hoan vi ngau nhien trong so tinh duoc giua cac Pattern
+    # moi epoch (truoc EMA / rao chan / Scheduler). RNG rieng, doc lap voi seed huan luyen.
+    shuffle_weights: bool = False
+    shuffle_seed: Optional[int] = None
 
     def __post_init__(self):
         if self.policy not in ("predictive", "state", "loss", "loss_abs", "uniform"):
             raise ValueError(
                 f"policy='{self.policy}' khong hop le. Chon: 'predictive', 'state', 'loss', 'loss_abs', 'uniform'."
             )
+        if self.shuffle_weights and self.policy == "uniform":
+            raise ValueError("shuffle_weights=True khong co y nghia voi policy='uniform'.")
+        self.shuffle_weights = bool(self.shuffle_weights)
+        if self.shuffle_seed is not None:
+            self.shuffle_seed = int(self.shuffle_seed)
         if not (0.0 < self.budget_ratio <= 1.0):
             raise ValueError(f"budget_ratio={self.budget_ratio} phai nam trong (0, 1].")
         if self.w_min <= 0.0 or self.w_max < self.w_min:
@@ -79,6 +88,8 @@ class PalfConfig:
             "z_clip": float(self.z_clip),
             "min_floor_samples": int(self.min_floor_samples),
             "min_floor_frac": float(self.min_floor_frac),
+            "shuffle_weights": bool(self.shuffle_weights),
+            "shuffle_seed": None if self.shuffle_seed is None else int(self.shuffle_seed),
         }
 
     @classmethod
@@ -95,7 +106,8 @@ class PalfConfig:
     def config_tag(self) -> str:
         if self.policy == "uniform":
             return f"uniform_b{self.budget_ratio:.1f}"
-        base = f"{self.policy}_b{self.budget_ratio:.1f}_a{self.alpha:.1f}"
+        pol = f"{self.policy}_shuffled" if self.shuffle_weights else self.policy
+        base = f"{pol}_b{self.budget_ratio:.1f}_a{self.alpha:.1f}"
         if abs(self.w_max - 3.0) > 1e-6:
             return f"{base}_w{self.w_max:g}"
         return base

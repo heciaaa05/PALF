@@ -190,6 +190,7 @@ def train_model(model_name, epochs=30, batch=128, lr=1e-3, device_name="cpu",
                     "updated": bool(current_decision.info["updated"]),
                     "hit_floor": bool(current_decision.info["hit_floor"].get(p_name, False)),
                     "hit_ceil": bool(current_decision.info["hit_ceil"].get(p_name, False)),
+                    "shuffle_source": str(current_decision.info.get("shuffle_source", {}).get(p_name, p_name)),
                 }
                 for sv in dict.fromkeys(list(cfg.state_vars) + ["loss_abs"]):
                     p_row[sv] = float(state_dict.get(p_name, {}).get(sv, np.nan))

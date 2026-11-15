@@ -94,6 +94,12 @@ class PolicyEngine:
             src = predictive_coef if predictive_coef is not None else self.cfg.predictive_coef_path
             self.predictive_coef = load_and_validate_predictive_coef(src)
 
+        # Prompt 10 (A0w): RNG rieng cho hoan vi trong so, doc lap voi np.random toan cuc / seed huan luyen
+        self._shuffle_rng = None
+        if self.cfg.shuffle_weights:
+            s_seed = self.cfg.shuffle_seed if self.cfg.shuffle_seed is not None else 0
+            self._shuffle_rng = np.random.default_rng(int(s_seed))
+
     def _active_vars_and_signs(self):
         if self.cfg.policy == "uniform":
             return (), {}
@@ -265,6 +271,25 @@ class PolicyEngine:
             hit_floor[p] = h_fl
             hit_ceil[p] = h_cl
 
+        # Prompt 10 — A0w: hoan vi ngau nhien trong so tinh duoc giua cac Pattern hop le (truoc EMA).
+        # Tap gia tri {w_raw}, {w_new}, so lan cham san/tran giu nguyen; chi mat thong tin "Pattern nao can hon".
+        shuffle_source = {p: p for p in self.pattern_names}
+        if self._shuffle_rng is not None and should_update:
+            valid_pats = [
+                p for p in self.pattern_names
+                if not any(np.isnan(clean_state[p].get(v, np.nan)) for v in active_vars)
+            ]
+            if len(valid_pats) >= 2:
+                perm = self._shuffle_rng.permutation(len(valid_pats))
+                src_pats = [valid_pats[int(i)] for i in perm]
+                old = (dict(w_raw), dict(w_new), dict(hit_floor), dict(hit_ceil))
+                for dst, src in zip(valid_pats, src_pats):
+                    w_raw[dst] = old[0][src]
+                    w_new[dst] = old[1][src]
+                    hit_floor[dst] = old[2][src]
+                    hit_ceil[dst] = old[3][src]
+                    shuffle_source[dst] = src
+
         if should_update:
             weights = {}
             beta = float(self.cfg.ema_beta)
@@ -293,5 +318,6 @@ class PolicyEngine:
             "w_new": w_new,
             "hit_floor": hit_floor,
             "hit_ceil": hit_ceil,
+            "shuffle_source": shuffle_source,
         }
         return PolicyDecision(weights=weights, info=info)

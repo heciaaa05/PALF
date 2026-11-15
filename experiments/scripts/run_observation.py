@@ -7,6 +7,7 @@ Quy uoc dau ra:
       experiments/results/palf/jena/<config_tag>/<model>/seed<k>/
 """
 import argparse
+import dataclasses
 import json
 import os
 import sys
@@ -102,6 +103,15 @@ def parse_args(argv=None):
         help="Tag thu muc cau hinh PALF (mac dinh: tu dong sinh tu PalfConfig, vd: state_b1.0_a1.0)."
     )
     parser.add_argument(
+        "--shuffle-weights", dest="shuffle_weights", action="store_true", default=False,
+        help="Prompt 10 (doi chung A0w): hoan vi ngau nhien trong so tinh duoc giua cac Pattern moi epoch "
+             "(truoc EMA/rao chan/Scheduler), giu nguyen phan bo trong so nhung mat thong tin Pattern."
+    )
+    parser.add_argument(
+        "--shuffle-seed", dest="shuffle_seed", type=int, default=None,
+        help="Seed RNG rieng cho hoan vi trong so (mac dinh: 100000 + seed huan luyen; doc lap voi RNG huan luyen)."
+    )
+    parser.add_argument(
         "--dataset", "--data", dest="dataset", type=str, default="jena",
         choices=["jena", "weather", "synthetic"],
         help="Nguon du lieu: jena (mac dinh) hoac synthetic."
@@ -155,6 +165,8 @@ def build_palf_config(args) -> PalfConfig:
         budget_ratio=args.budget_ratio,
         window=args.window,
         predictive_coef_path=args.predictive_coef_path,
+        shuffle_weights=bool(getattr(args, "shuffle_weights", False)),
+        shuffle_seed=getattr(args, "shuffle_seed", None),
     )
 
 
@@ -232,6 +244,11 @@ def run_from_args(args):
                 flush=True,
             )
 
+        run_palf_cfg = palf_cfg
+        if palf_cfg is not None and palf_cfg.shuffle_weights:
+            s_seed = args.shuffle_seed if args.shuffle_seed is not None else 100000 + int(seed)
+            run_palf_cfg = dataclasses.replace(palf_cfg, shuffle_seed=int(s_seed))
+
         res = train_model(
             model_name=canonical_model,
             epochs=args.epochs,
@@ -250,7 +267,7 @@ def run_from_args(args):
             pattern_scheme=pattern_scheme,
             target_col=target_col,
             mode=args.mode,
-            palf_config=palf_cfg,
+            palf_config=run_palf_cfg,
         )
         if args.mode == "palf" and args.config_tag:
             res["run_config"]["config_tag"] = config_tag
