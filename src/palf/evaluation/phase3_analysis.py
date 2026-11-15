@@ -1313,17 +1313,19 @@ def run_g3_followup_analysis(
     df_c = pd.DataFrame(rows_c)
     df_c.to_csv(os.path.join(out_dir, "g3_check_c_mean_reversion.csv"), index=False)
 
-    # Phan 4.2 & Prompt 8.4: Xuat 4 ban predictive_coef*.json + ban mac dinh predictive_coef.json
+    # Phan 4.2, Prompt 8.4 & Prompt 9.2: Xuat cac ban predictive_coef*.json + ban mac dinh predictive_coef.json
     coef_pooled = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="pooled", fit_seeds=(0, 1, 2, 3, 4), controls_epoch=True)
     coef_gru = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(0, 1, 2, 3, 4), controls_epoch=True)
     coef_gru34 = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(3, 4), controls_epoch=True)
     coef_gru012 = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="gru", fit_seeds=(0, 1, 2), controls_epoch=True)
+    coef_tcn34 = fit_predictive_coef_dict(df_raw, features=("loss_ratio", "instability"), k=k, fit_scope="tcn", fit_seeds=(3, 4), controls_epoch=True)
 
     for fname, cdict in [
         ("predictive_coef_pooled.json", coef_pooled),
         ("predictive_coef_gru.json", coef_gru),
         ("predictive_coef_gru_seeds34.json", coef_gru34),
         ("predictive_coef_gru_seeds012.json", coef_gru012),
+        ("predictive_coef_tcn_seeds34.json", coef_tcn34),
         ("predictive_coef.json", coef_gru34),
     ]:
         with open(os.path.join(out_dir, fname), "w", encoding="utf-8") as f:

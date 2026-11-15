@@ -13,6 +13,7 @@ Tài liệu này ghi nhận toàn bộ các lần chạy thực nghiệm chính 
 | Mã cấu hình | Chế độ (`mode`) | Chính sách (`policy`) | Ngân sách (`budget_ratio`) | Tham số `(alpha, w_max)` | Thư mục lưu kết quả |
 | :--- | :--- | :--- | :---: | :---: | :--- |
 | **`A0`** | `baseline` | `uniform` (DataLoader chuẩn) | `1.0` | `-` | `experiments/results/baseline/jena/<model>/seed<s>/` |
+| **`A0s`** | `palf` | `uniform` (qua `AdaptiveScheduler`) | `1.0` | `-` | `experiments/results/palf/jena/uniform_b1.0/<model>/seed<s>/` |
 | **`A0r`** | `palf` | `uniform` (qua `AdaptiveScheduler`) | `0.7` | `-` | `experiments/results/palf/jena/uniform_b0.7/<model>/seed<s>/` |
 | **`A1`** | `palf` | `loss` (chỉ dùng `loss_ratio`, B2) | `1.0` | `(1.0, 3.0)` | `experiments/results/palf/jena/loss_b1.0_a1.0/<model>/seed<s>/` |
 | **`A3`** | `palf` | `predictive (không đạt ngưỡng G3)` | `1.0` | `(0.5, 2.0)` (từ `tuning_val.md`) | `experiments/results/palf/jena/predictive_b1.0_a0.5_w2/<model>/seed<s>/` |
@@ -53,9 +54,26 @@ Hệ số hồi quy tuyến tính sử dụng: `experiments/analysis/phase3_real
 
 | Mã | Cấu hình (`config_tag`) | Backbone | Seeds | Số mẫu (`train / val / test`) | Epoch / Patience | Đường dẫn kết quả |
 | :--- | :--- | :--- | :---: | :---: | :---: | :--- |
+| `A0s` | `uniform_b1.0` | `gru` | `0, 1, 2, 3, 4` | `48981 / 10377 / 10377` | `patience=5` | `experiments/results/palf/jena/uniform_b1.0/gru/seed{0..4}/` |
 | `A0r` | `uniform_b0.7` | `gru` | `0, 1, 2, 3, 4` | `48981 / 10377 / 10377` | `s0..2: 30 ep; s3..4: patience=5` | `experiments/results/palf/jena/uniform_b0.7/gru/seed{0..4}/` |
 | `A1` | `loss_b1.0_a1.0` | `gru` | `0, 1, 2, 3, 4` | `48981 / 10377 / 10377` | `s0..2: 30 ep; s3..4: patience=5` | `experiments/results/palf/jena/loss_b1.0_a1.0/gru/seed{0..4}/` |
 | `A3` | `predictive_b1.0_a0.5_w2` *(không đạt ngưỡng G3)* | `gru` | `0, 1, 2, 3, 4` | `48981 / 10377 / 10377` | `s0..2: 30 ep; s3..4: patience=5` | `experiments/results/palf/jena/predictive_b1.0_a0.5_w2/gru/seed{0..4}/` |
 | `A3r` | `predictive_b0.7_a0.5_w2` *(không đạt ngưỡng G3)* | `gru` | `0, 1, 2, 3, 4` | `48981 / 10377 / 10377` | `s0..2: 30 ep; s3..4: patience=5` | `experiments/results/palf/jena/predictive_b0.7_a0.5_w2/gru/seed{0..4}/` |
 | `E1` | `e1_warmup1_b1.0_a0.5_w2` *(khám phá)* | `gru` | `0, 1, 2` | `48981 / 10377 / 10377` | `patience=5` | `experiments/results/palf/jena/e1_warmup1_b1.0_a0.5_w2/gru/seed{0..2}/` |
 | `E2` | `loss_abs_b1.0_a0.5_w2` *(khám phá)* | `gru` | `0, 1, 2` | `48981 / 10377 / 10377` | `patience=5` | `experiments/results/palf/jena/loss_abs_b1.0_a0.5_w2/gru/seed{0..2}/` |
+| `A0s` | `uniform_b1.0` | `tcn` | `0, 1, 2` | `48981 / 10377 / 10377` | `patience=5` | `experiments/results/palf/jena/uniform_b1.0/tcn/seed{0..2}/` |
+| `A1` | `loss_b1.0_a1.0` | `tcn` | `0, 1, 2` | `48981 / 10377 / 10377` | `patience=5` | `experiments/results/palf/jena/loss_b1.0_a1.0/tcn/seed{0..2}/` |
+| `A3` | `predictive_b1.0_a0.5_w2` *(không đạt ngưỡng G3)* | `tcn` | `0, 1, 2` | `48981 / 10377 / 10377` | `patience=5` | `experiments/results/palf/jena/predictive_b1.0_a0.5_w2/tcn/seed{0..2}/` |
+
+---
+
+## 5. Sao lưu kết quả Baseline `A0` ngoài Repo (Prompt 9 — Mục 9.4)
+
+Vì thư mục `experiments/results/baseline/` nằm trong `.gitignore` để giữ kho mã gọn nhẹ, toàn bộ tệp kết quả gốc của `A0` (`run_config.json`, `history.csv`, `epoch_pattern_log.csv`, `test_metrics.json`, không gồm `*.npy` và `cartography.csv`) cho cả **4 backbone (`gru, tcn, transformer, patchtst` × `seeds 0..4` = 20 runs)** đã được đóng gói và kiểm tra tái lập sạch tại:
+
+- **Đường dẫn bản sao lưu cục bộ / phát hành ngoài lịch sử Git:** `C:\Users\Admin\Downloads\PALF_A0_baseline_backup_all4backbones.zip` (`175,047 bytes`, chứa cấu trúc chuẩn `experiments/results/baseline/jena/<model>/seed{0..4}/`).
+- **Cách khôi phục trên bản sao sạch của repo:**
+  ```powershell
+  Expand-Archive -Path C:\Users\Admin\Downloads\PALF_A0_baseline_backup_all4backbones.zip -DestinationPath . -Force
+  .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru --seeds 0,1,2,3,4
+  ```

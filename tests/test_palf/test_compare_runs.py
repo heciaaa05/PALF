@@ -143,7 +143,7 @@ def test_compare_runs_known_values_and_missing_configs(tmp_path):
     assert "temp_anomaly_cold" in set(pat_sum["pattern"])
 
     miss_df = res["missing_df"]
-    assert set(miss_df["code"]) == {"A1", "A3"}
+    assert set(miss_df["code"]) == {"A0s", "A1", "A3"}
     assert (miss_df["status"] == "MISSING_ALL").all()
 
 

@@ -9,6 +9,7 @@ from palf.core import (
     PolicyDecision,
     PolicyEngine,
 )
+from palf.training.scheduler import AdaptiveScheduler
 
 
 PATTERNS = ["pressure_drop", "humidity_net_rise", "temp_anomaly", "normal"]
@@ -276,3 +277,24 @@ def test_loss_abs_policy_and_warmup1_tracker():
     d2_val = eng_val.decide(2, st2_with_val)
     assert d2_clean.weights == d2_val.weights
     assert d2_clean.info["need_score"] == d2_val.info["need_score"]
+
+
+def test_a0s_uniform_budget_1_0_exact_one_pass_per_epoch():
+    """(Prompt 9 Muc 9.1): Test bat buoc truoc khi chay A0s:
+    Khi policy='uniform' va budget_ratio=1.0, moi epoch gom dung 1 lan moi mau train
+    (len(indices) == n_train va set(indices) == {0, 1, ..., n_train - 1})."""
+    rng = np.random.default_rng(42)
+    n_train = 1000
+    pat_train = rng.choice(len(PATTERNS), size=n_train, p=[0.1, 0.1, 0.15, 0.65])
+    cfg_a0s = PalfConfig(policy="uniform", budget_ratio=1.0)
+    eng_a0s = PolicyEngine(PATTERNS, FREQS, cfg_a0s)
+    sched_a0s = AdaptiveScheduler(pat_train, PATTERNS, cfg=cfg_a0s, seed=0)
+
+    state = {p: {"loss_ratio": 0.5, "velocity": 0.1, "instability": 0.05} for p in PATTERNS}
+    for ep in range(1, 6):
+        dec = eng_a0s.decide(ep, state)
+        indices = sched_a0s.plan_epoch(ep, dec)
+        assert len(indices) == n_train
+        assert np.array_equal(np.sort(indices), np.arange(n_train, dtype=np.int64))
+        for p in PATTERNS:
+            assert sched_a0s.last_quotas[p] == sched_a0s.pattern_counts[p]

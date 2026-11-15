@@ -278,6 +278,68 @@ def summarize_palf_diagnostics(run_dict: Optional[dict]) -> dict:
     }
 
 
+_CODE_MAP = {
+    "baseline": "A0 (baseline)",
+    "uniform_b1.0": "A0s (uniform_b1.0)",
+    "uniform_b0.7": "A0r (uniform_b0.7)",
+    "loss_b1.0_a1.0": "A1 (loss_b1.0_a1.0)",
+    "predictive_b1.0_a0.5_w2": "A3 (predictive_b1.0_a0.5_w2 - không đạt G3)",
+    "predictive_b0.7_a0.5_w2": "A3r (predictive_b0.7_a0.5_w2 - không đạt G3)",
+    "e1_warmup1_b1.0_a0.5_w2": "E1 (warmup1_b1.0_a0.5_w2 - không đạt G3)",
+    "loss_abs_b1.0_a0.5_w2": "E2 (loss_abs_b1.0_a0.5_w2)",
+}
+_CODE_ORDER = list(_CODE_MAP.keys())
+
+
+def summarize_overall_across_seeds(saved_runs: List[dict], model_filter: Optional[str] = None) -> pd.DataFrame:
+    """Tong hop bang Test MAE, RMSE (°C), Best Val Loss va Best Epoch qua cac seed (Mean ± Std)
+    cho tung (Model, Config) — phuc vu Man hinh 1 & 3 trong Demo."""
+    rows = []
+    for r in saved_runs:
+        if model_filter and model_filter != "Tất cả" and r["model"].upper() != model_filter.upper():
+            continue
+        tm = r.get("test_metrics", {})
+        hist = r.get("history", pd.DataFrame())
+        best_val = float(tm.get("best_val_loss", hist["val_loss"].min() if not hist.empty else np.nan))
+        best_ep = float(tm.get("best_epoch", hist.loc[hist["val_loss"].idxmin(), "epoch"] if not hist.empty else np.nan))
+        rows.append({
+            "Model": r["model"].upper(),
+            "Config": r["config_tag"],
+            "Seed": int(r["seed"]),
+            "mae_degC": float(tm.get("mae_degC", np.nan)),
+            "rmse_degC": float(tm.get("rmse_degC", np.nan)),
+            "best_val_loss": best_val,
+            "best_epoch": best_ep,
+        })
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    df["_ord"] = df["Config"].map(lambda c: _CODE_ORDER.index(c) if c in _CODE_ORDER else 99)
+    df = df.sort_values(["Model", "_ord", "Config", "Seed"]).reset_index(drop=True)
+    out_rows = []
+    for (m, cfg), grp in df.groupby(["Model", "Config"], sort=False):
+        n_s = len(grp)
+        seeds_str = ",".join(str(s) for s in sorted(grp["Seed"].tolist()))
+        m_mean = float(grp["mae_degC"].mean())
+        m_std = float(grp["mae_degC"].std(ddof=1)) if n_s > 1 else 0.0
+        r_mean = float(grp["rmse_degC"].mean())
+        r_std = float(grp["rmse_degC"].std(ddof=1)) if n_s > 1 else 0.0
+        v_mean = float(grp["best_val_loss"].mean())
+        v_std = float(grp["best_val_loss"].std(ddof=1)) if n_s > 1 else 0.0
+        ep_mean = float(grp["best_epoch"].mean())
+        out_rows.append({
+            "Backbone": m,
+            "Mã & Cấu hình": _CODE_MAP.get(cfg, cfg),
+            "Số seed": f"{n_s} ({seeds_str})",
+            "Test MAE (°C) (Mean ± Std)": f"{m_mean:.4f} ± {m_std:.4f}",
+            "Test RMSE (°C) (Mean ± Std)": f"{r_mean:.4f} ± {r_std:.4f}",
+            "Best Val Loss (Mean ± Std)": f"{v_mean:.4f} ± {v_std:.4f}",
+            "Best Epoch (Mean)": f"{ep_mean:.1f}",
+        })
+    return pd.DataFrame(out_rows)
+
+
 def summarize_pattern_mae_across_seeds(saved_runs: List[dict], model_filter: Optional[str] = None) -> pd.DataFrame:
     """Tong hop bang MAE va RMSE (°C) theo Pattern kem do lech chuan giua cac seed (Mean ± Std)
     cho tung (Model, Config) — phuc vu Man hinh 3 trong Prompt 7 Phan 3.1."""
@@ -300,6 +362,8 @@ def summarize_pattern_mae_across_seeds(saved_runs: List[dict], model_filter: Opt
         return pd.DataFrame()
 
     df = pd.DataFrame(rows)
+    df["_ord"] = df["Config"].map(lambda c: _CODE_ORDER.index(c) if c in _CODE_ORDER else 99)
+    df = df.sort_values(["Model", "_ord", "Config"]).reset_index(drop=True)
     out_rows = []
     for (m, cfg, pat), grp in df.groupby(["Model", "Config", "Pattern"], sort=False):
         n_s = len(grp)
@@ -309,7 +373,7 @@ def summarize_pattern_mae_across_seeds(saved_runs: List[dict], model_filter: Opt
         r_std = float(grp["rmse_degC"].std(ddof=1)) if n_s > 1 else 0.0
         out_rows.append({
             "Backbone": m,
-            "Cấu hình": cfg,
+            "Cấu hình": _CODE_MAP.get(cfg, cfg),
             "Pattern": pat,
             "Số seed": n_s,
             "Số mẫu test": int(grp["n_test"].iloc[0]),

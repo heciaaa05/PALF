@@ -1,0 +1,85 @@
+{
+  "mode": "palf",
+  "palf_config": {
+    "policy": "predictive",
+    "warmup_epochs": 3,
+    "update_every": 1,
+    "alpha": 0.5,
+    "w_min": 0.25,
+    "w_max": 2.0,
+    "ema_beta": 0.5,
+    "budget_ratio": 1.0,
+    "window": 3,
+    "state_vars": [
+      "loss_ratio",
+      "velocity",
+      "instability"
+    ],
+    "state_signs": {
+      "loss_ratio": 1.0,
+      "velocity": 1.0,
+      "instability": 0.5
+    },
+    "predictive_coef_path": "experiments\\analysis\\phase3_real\\predictive_coef_tcn_seeds34.json",
+    "z_clip": 3.0,
+    "min_floor_samples": 32,
+    "min_floor_frac": 0.05
+  },
+  "predictive_coef": {
+    "target": "delta_loss_k3",
+    "features": [
+      "loss_ratio",
+      "instability"
+    ],
+    "standardize": {
+      "loss_ratio": {
+        "mean": 0.248067287923879,
+        "std": 0.1587306379191047
+      },
+      "instability": {
+        "mean": 0.0245325514784462,
+        "std": 0.032838329078631705
+      }
+    },
+    "intercept": -0.05711653903468887,
+    "coef": {
+      "loss_ratio": -0.03132853751789391,
+      "instability": -0.011292382415190785
+    },
+    "fit_scope": "tcn",
+    "fit_seeds": [
+      3,
+      4
+    ],
+    "controls_epoch": true
+  },
+  "config_tag": "predictive_b1.0_a0.5_w2",
+  "model": "tcn",
+  "model_name": "TCN",
+  "seed": 2,
+  "epochs": 30,
+  "epochs_run": 8,
+  "patience": 5,
+  "stopped_early": true,
+  "batch": 128,
+  "lr": 0.001,
+  "device": "cpu",
+  "pattern_scheme": "weather_v1",
+  "pattern_names": [
+    "pressure_drop",
+    "humidity_net_rise",
+    "temp_anomaly",
+    "normal"
+  ],
+  "target_col": "T (degC)",
+  "target_idx": 1,
+  "input_len": 96,
+  "horizon": 24,
+  "input_dim": 14,
+  "n_train": 48981,
+  "n_val": 10377,
+  "n_test": 10377,
+  "params": 101336,
+  "save_sample_losses": false,
+  "git_commit": "92b65a193d9d0ef4cadbf9d1ad59d4e86c2ca139"
+}

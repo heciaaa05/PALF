@@ -8,6 +8,7 @@ from palf.core.config import PalfConfig
 from palf.data import prepare_data, prepare_weather_data
 from palf.evaluation.demo_loader import (
     discover_saved_runs,
+    summarize_overall_across_seeds,
     summarize_palf_diagnostics,
     summarize_pattern_mae_across_seeds,
     summarize_side_by_side,
@@ -265,6 +266,11 @@ if page.startswith("1."):
                     st.markdown("**Test RMSE (°C) theo Pattern**")
                     rmse_piv = pat_df.pivot(index="Pattern", columns="Run", values="RMSE (°C)")
                     st.dataframe(rmse_piv, use_container_width=True)
+
+            st.markdown("#### Bảng tổng hợp toàn cục qua các Seed (`Mean ± Std` — bao gồm `A0, A0s, A0r, A1, A3, A3r, E1, E2`)")
+            agg_overall_df = summarize_overall_across_seeds(saved_runs, model_filter=sel_model)
+            if not agg_overall_df.empty:
+                st.dataframe(agg_overall_df, hide_index=True, use_container_width=True)
 
             st.markdown("#### Bảng tổng hợp Test MAE & RMSE (°C) theo Pattern qua các Seed (`Mean ± Std`)")
             agg_pat_df = summarize_pattern_mae_across_seeds(saved_runs, model_filter=sel_model)

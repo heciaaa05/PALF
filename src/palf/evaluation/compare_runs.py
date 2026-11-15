@@ -13,19 +13,20 @@ from .demo_loader import (
     load_saved_run,
 )
 
-# Danh sach cau hinh chuan theo Spec v1 Muc 7, Prompt 7 Phan 5.2 & Prompt 8
-# Luu y (Prompt 8): A3 va A3r phai ghi ro 'predictive (khong dat nguong G3)'.
+# Danh sach cau hinh chuan theo Spec v1 Muc 7, Prompt 7 Phan 5.2, Prompt 8 & Prompt 9
+# Luu y (Prompt 8 & 9): A3 va A3r phai ghi ro 'predictive (khong dat nguong G3)'; A0s la doi chung chinh cua A1 va A3.
 STANDARD_CONFIGS = [
-    {"code": "A0", "mode": "baseline", "policy": "uniform", "config_tag": "baseline", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform (budget 1.0)"},
-    {"code": "A0r", "mode": "palf", "policy": "uniform", "config_tag": "uniform_b0.7", "budget_ratio": 0.7, "ref_code": "A0", "desc": "Baseline uniform qua Scheduler (budget 0.7)"},
-    {"code": "A1", "mode": "palf", "policy": "loss", "config_tag": "loss_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Doi chung B2 chi dung loss_ratio (budget 1.0)"},
-    {"code": "A3", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0", "desc": "predictive (khong dat nguong G3, budget 1.0)"},
+    {"code": "A0", "mode": "baseline", "policy": "uniform", "config_tag": "baseline", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform (DataLoader chuan, budget 1.0)"},
+    {"code": "A0s", "mode": "palf", "policy": "uniform", "config_tag": "uniform_b1.0", "budget_ratio": 1.0, "ref_code": "A0", "desc": "Baseline uniform qua Scheduler (budget 1.0)"},
+    {"code": "A0r", "mode": "palf", "policy": "uniform", "config_tag": "uniform_b0.7", "budget_ratio": 0.7, "ref_code": "A0s", "desc": "Baseline uniform qua Scheduler (budget 0.7)"},
+    {"code": "A1", "mode": "palf", "policy": "loss", "config_tag": "loss_b1.0_a1.0", "budget_ratio": 1.0, "ref_code": "A0s", "desc": "Doi chung B2 chi dung loss_ratio (budget 1.0)"},
+    {"code": "A3", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0s", "desc": "predictive (khong dat nguong G3, budget 1.0)"},
     {"code": "A3r", "mode": "palf", "policy": "predictive", "config_tag": "predictive_b0.7_a0.5_w2", "budget_ratio": 0.7, "ref_code": "A0r", "desc": "predictive (khong dat nguong G3, budget 0.7)"},
 ]
 
 EXPLORATORY_CONFIGS = [
-    {"code": "E1", "mode": "palf", "policy": "predictive", "config_tag": "e1_warmup1_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0", "desc": "[Kham pha E1] predictive (khong dat nguong G3, warmup=1)"},
-    {"code": "E2", "mode": "palf", "policy": "loss_abs", "config_tag": "loss_abs_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0", "desc": "[Kham pha E2] loss_abs (loss tuyet doi theo Pattern, warmup=3)"},
+    {"code": "E1", "mode": "palf", "policy": "predictive", "config_tag": "e1_warmup1_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0s", "desc": "[Kham pha E1] predictive (khong dat nguong G3, warmup=1)"},
+    {"code": "E2", "mode": "palf", "policy": "loss_abs", "config_tag": "loss_abs_b1.0_a0.5_w2", "budget_ratio": 1.0, "ref_code": "A0s", "desc": "[Kham pha E2] loss_abs (loss tuyet doi theo Pattern, warmup=3)"},
 ]
 
 
@@ -333,10 +334,12 @@ def summarize_overall_and_paired(detail_df: pd.DataFrame) -> Tuple[pd.DataFrame,
             if code == "A0":
                 continue
             ref_candidates = [g_cur["ref_code"].iloc[0]]
+            if code in ("A1", "A3", "A2", "A0r", "E1", "E2") and "A0s" in by_code and "A0s" not in ref_candidates:
+                ref_candidates.insert(0, "A0s")
             if "A0" not in ref_candidates:
                 ref_candidates.append("A0")
             if code in ("A3", "A2", "E1", "E2") and "A1" in by_code and "A1" not in ref_candidates:
-                ref_candidates.insert(0, "A1")
+                ref_candidates.append("A1")
             if code in ("E1", "E2") and "A3" in by_code and "A3" not in ref_candidates:
                 ref_candidates.insert(0, "A3")
             for ref_c in ref_candidates:
@@ -552,7 +555,16 @@ def write_comparison_markdown(
     lines.extend(["", "## 2. Bảng MAE và RMSE (°C) theo từng Pattern (kể cả tách `temp_anomaly` nóng/lạnh)", ""])
     lines.extend(_format_pattern_table(pat_summary_df))
 
-    lines.extend(["", "## 3. So sánh ghép cặp theo Seed (Paired Differences vs A0 / A0r / A1)", ""])
+    lines.extend([
+        "",
+        "## 3. So sánh ghép cặp theo Seed (Paired Differences vs A0s / A0 / A0r / A1 — A0s là đối chứng chính của A1, A3 theo Mục 9.1)",
+        "",
+        "> **Cách đọc đăng ký trước đối với `A0s` (Prompt 9 — Mục 9.1):**",
+        "> - **Kết quả thực nghiệm trên 5 seed GRU:** `A0s - A0 = -0.0007 ± 0.0164 °C` (`|hiệu| = 0.0007 °C` nhỏ hơn nhiều so với độ lệch chuẩn giữa các seed của `A0` là `0.0255 °C` và của `A0s` là `0.0161 °C` $\\Rightarrow$ **`A0s ≈ A0`**).",
+        "> - **Theo quy tắc đăng ký trước (Nhánh 1 — `A0s ≈ A0`):** Khi giữ nguyên lấy mẫu đều 100% không hoàn lại mỗi epoch (`uniform, budget=1.0`), đường mã `AdaptiveScheduler` (`A0s: 1.7829 ± 0.0161 °C`) cho kết quả trùng khít với `DataLoader` chuẩn (`A0: 1.7836 ± 0.0255 °C`). Do đó, phần cải thiện của `A1` (`-0.0211 ± 0.0142 °C` so với `A0s`), `A3` (`-0.0148 ± 0.0118 °C` so với `A0s`) và `A0r` (`-0.0151 ± 0.0079 °C` so với `A0s`) **không phải do bản thân đường mã `AdaptiveScheduler` khi lấy đủ 100% mẫu**, mà xuất hiện khi thay đổi cơ chế lấy mẫu sau warmup (giảm mẫu ngẫu nhiên 30% ở `A0r` hoặc lấy mẫu có hoàn lại theo trọng số ở `A1/A3`).",
+        "> - **Theo quy tắc đăng ký trước (Nhánh 3 & tổng hợp):** Độ giảm của `A1` (`-0.0211 °C`) và `A3` (`-0.0148 °C`) so với `A0s` nhỉnh hơn/xấp xỉ 1 độ lệch chuẩn liên-seed (`0.0161 °C`), nên được ghi nhận là **xu hướng kèm cảnh báo $n=5$ nhỏ và không hiệu chỉnh đa so sánh**. Tuy nhiên, vì `A3` (`1.7682 °C`) và `A1` (`1.7618 °C`) **vẫn chưa phân biệt được với đối chứng giảm mẫu đồng đều không dùng Pattern (`A0r: 1.7678 ± 0.0118 °C`)** và `A3 - A1 = +0.0063 ± 0.0148 °C`, `A3r - A0r = +0.0021 ± 0.0043 °C`, nên **không có bằng chứng cho thấy trọng số theo Pattern hay công thức `predictive` mang lại lợi ích vượt trên việc giảm mẫu / lấy mẫu có hoàn lại**.",
+        "",
+    ])
     lines.extend(_format_paired_table(paired_df))
 
     if extra_sections and "paired_3seeds_df" in extra_sections and not extra_sections["paired_3seeds_df"].empty:
@@ -590,6 +602,36 @@ def write_comparison_markdown(
                 "",
             ])
             lines.extend(_format_paired_table(extra_sections["exploratory_paired_df"]))
+
+        if "tcn_summary_df" in extra_sections and not extra_sections["tcn_summary_df"].empty:
+            lines.extend([
+                "",
+                "## 4b. Nhân bản trên Backbone TCN (`A0, A0s, A1, A3` — `seeds 0, 1, 2`, Mục 9.2)",
+                "",
+                "> **Ghi chú nhân bản trên TCN (Prompt 9 — Mục 9.2):**",
+                "> - Chạy với cùng siêu tham số từ GRU (`alpha=0.5, w_max=2.0` cho `A3`, `alpha=1.0, w_max=3.0` cho `A1`, **không tinh chỉnh lại trên TCN**) và hệ số ngoài mẫu `experiments/analysis/phase3_real/predictive_coef_tcn_seeds34.json` (`fit_scope: \"tcn\"`, `fit_seeds: [3, 4]`) để kiểm tra tính lặp lại trên kiến trúc tích chập nhân quả giãn nở (TCN). Kết luận chỉ mô tả xu hướng (`3 seeds`).",
+                "> - **Quan sát mô tả trên TCN:** TCN hội tụ sớm hơn cả GRU (`best_epoch = 3.0` ở `A0`/`A0s` và `3.7` ở `A1`/`A3`). Ở `2/3` seed (`seed 0, 2`), điểm `val_loss` tốt nhất đạt ngay tại `epoch 3` (cuối giai đoạn `warmup_epochs = 3`), các epoch 4–8 sau khi Policy can thiệp không vượt qua mốc `val_loss` của epoch 3 nên checkpoint tốt nhất của `A0s, A1, A3` trùng nhau (`hiệu số = 0.0000 °C` ở `s0, s2`); ở `seed 1` (`best_epoch = 5`), `A1` (`1.7799 °C`) và `A3` (`1.8061 °C`) có MAE cao hơn nhẹ so với `A0s` (`1.7633 °C`). Nhóm `temp_anomaly` tiếp tục có sai số cao nhất ở mọi cấu hình (`1.9502–1.9798 °C`). Như vậy, hiện tượng hội tụ sớm và không tách biệt được hiệu quả của Policy lặp lại nhất quán trên backbone thứ hai (TCN).",
+                "",
+                "### Bảng tổng hợp TCN (`seeds 0, 1, 2`)",
+                "",
+            ])
+            lines.extend(_format_overall_table(extra_sections["tcn_summary_df"]))
+
+            if "tcn_pat_df" in extra_sections and not extra_sections["tcn_pat_df"].empty:
+                lines.extend([
+                    "",
+                    "### Bảng Test MAE & RMSE (°C) theo từng Pattern trên TCN (`seeds 0, 1, 2`)",
+                    "",
+                ])
+                lines.extend(_format_pattern_table(extra_sections["tcn_pat_df"]))
+
+            if "tcn_paired_df" in extra_sections and not extra_sections["tcn_paired_df"].empty:
+                lines.extend([
+                    "",
+                    "### Hiệu số ghép cặp theo Seed trên TCN (`A0s - A0`, `A1 - A0s`, `A3 - A0s`, `A3 - A1`)",
+                    "",
+                ])
+                lines.extend(_format_paired_table(extra_sections["tcn_paired_df"]))
 
     lines.extend(["", "## 5. Báo cáo các cấu hình còn thiếu (Missing Configurations)", ""])
     if missing_df.empty:
@@ -672,7 +714,7 @@ def run_comparison_protocol(
         sum_4.to_csv(os.path.join(out_dir, "summary_overall_seeds1234.csv"), index=False)
 
     if config_specs is None:
-        exp_specs = [c for c in STANDARD_CONFIGS if c["code"] in ("A0", "A0r", "A1", "A3")] + EXPLORATORY_CONFIGS
+        exp_specs = [c for c in STANDARD_CONFIGS if c["code"] in ("A0", "A0s", "A0r", "A1", "A3")] + EXPLORATORY_CONFIGS
         exp_runs, _ = collect_protocol_runs(
             baseline_root=baseline_root,
             palf_root=palf_root,
@@ -688,9 +730,32 @@ def run_comparison_protocol(
             exp_sum, exp_pair = summarize_overall_and_paired(exp_det)
             exp_pat_sum = summarize_by_pattern(exp_pat)
             extra_sections["exploratory_summary_df"] = exp_sum
-            extra_sections["exploratory_pat_df"] = exp_pat_sum[exp_pat_sum["code"].isin(["A0", "A1", "A3", "E1", "E2"])]
+            extra_sections["exploratory_pat_df"] = exp_pat_sum[exp_pat_sum["code"].isin(["A0", "A0s", "A1", "A3", "E1", "E2"])]
             extra_sections["exploratory_paired_df"] = exp_pair[exp_pair["code"].isin(["E1", "E2"])]
             exp_sum.to_csv(os.path.join(out_dir, "summary_exploratory_e1_e2.csv"), index=False)
+
+        if "tcn" not in [m.lower() for m in models]:
+            tcn_specs = [c for c in STANDARD_CONFIGS if c["code"] in ("A0", "A0s", "A1", "A3")]
+            tcn_runs, _ = collect_protocol_runs(
+                baseline_root=baseline_root,
+                palf_root=palf_root,
+                models=("tcn",),
+                seeds=(0, 1, 2),
+                config_specs=tcn_specs,
+                strict_validation=False,
+            )
+            if any(r["code"] != "A0" for r in tcn_runs):
+                tcn_vt = compute_val_targets_from_a0(tcn_runs)
+                tcn_det, tcn_pat = build_detail_and_pattern_tables(tcn_runs, tcn_vt)
+                tcn_sum, tcn_pair = summarize_overall_and_paired(tcn_det)
+                tcn_pat_sum = summarize_by_pattern(tcn_pat)
+                extra_sections["tcn_summary_df"] = tcn_sum
+                extra_sections["tcn_pat_df"] = tcn_pat_sum
+                extra_sections["tcn_paired_df"] = tcn_pair
+                tcn_sum.to_csv(os.path.join(out_dir, "summary_tcn_3seeds.csv"), index=False)
+                tcn_pat_sum.to_csv(os.path.join(out_dir, "summary_by_pattern_tcn.csv"), index=False)
+                tcn_pair.to_csv(os.path.join(out_dir, "paired_differences_tcn.csv"), index=False)
+                plot_comparison_figures(tcn_runs, tcn_pat_sum, tcn_vt, out_dir)
 
     report_path = os.path.join(out_dir, "comparison_report.md")
     write_comparison_markdown(summary_df, pat_summary_df, paired_df, missing_df, report_path, extra_sections=extra_sections)
