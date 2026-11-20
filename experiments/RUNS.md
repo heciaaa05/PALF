@@ -82,6 +82,7 @@ Vì thư mục `experiments/results/baseline/` nằm trong `.gitignore` để gi
   Expand-Archive -Path C:\Users\Admin\Downloads\PALF_A0_baseline_backup_all4backbones.zip -DestinationPath . -Force
   .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru --seeds 0,1,2,3,4,5,6,7,8,9
   ```
+- **Lưu ý (Sao lưu đa điểm):** Bên cạnh bản cục bộ `C:\Users\Admin\Downloads\PALF_A0_baseline_backup_all4backbones.zip`, bản Google Drive được lưu tại: https://drive.google.com/file/d/1QnN84TE57IYcSBL4QaJ-Mzi6tNwJhYp9/view?usp=sharing
 
 ## 6. Kiểm định cuối 10 Seed trên GRU & Đối chứng Trọng số Xáo trộn `A0w` (Prompt 10)
 - **`A0w` (`loss_shuffled_b1.0_a1.0`, `seeds 0..9`):**
