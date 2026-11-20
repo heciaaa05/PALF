@@ -190,9 +190,16 @@ Bảng tổng hợp từ [`experiments/analysis/comparison/comparison_report.md`
 
 ---
 
-## 6. Hướng dẫn cài đặt & Chạy Demo trong 3 bước (PowerShell)
+## 6. Hướng dẫn cài đặt & Chạy Demo (1 Lệnh Tự động hoặc 3 Bước Thủ công)
 
-### 6.1. Chạy Demo trong 3 bước (từ bản clone mới, không cần chạy huấn luyện)
+### 6.1. Cách 1 — Chạy 1 file duy nhất (tự động cài `.venv`, giải nén sao lưu nếu có, chạy `pytest` và mở Demo)
+Sau khi `git clone https://github.com/heciaaa05/PALF.git; cd PALF`, bạn chỉ cần click đúp vào [`run_demo.bat`](file:///d:/Github/PALF/run_demo.bat) hoặc gõ 1 dòng lệnh:
+```powershell
+.\run_demo.bat
+```
+*(Nếu muốn bỏ qua bước chạy `pytest` để mở thẳng giao diện nhanh hơn ở các lần sau: `.\run_demo.bat -SkipTests`).*
+
+### 6.1b. Cách 2 — Chạy từng bước thủ công (PowerShell)
 ```powershell
 # Bước 1: Tạo môi trường ảo và cài đặt phụ thuộc
 python -m venv .venv; .\.venv\Scripts\pip.exe install -r requirements.txt
