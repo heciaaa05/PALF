@@ -54,29 +54,32 @@ flowchart LR
    - Ghi nhận ma trận lỗi từng mẫu qua các epoch (`sample_loss_epochs.npy` kích thước $N_{\text{train}} \times E$), số lượng mẫu thực sự được duyệt `n_seen`, độ lớn gradient (`grad_norm`) trên tập probe cố định, và bản đồ dữ liệu Dataset Cartography (`cartography.csv`).
 
 3. **Phase 3 — Phân tích Thống kê & Kiểm định Dự báo (`src/palf/evaluation/phase3_analysis.py`)**:
-   - Chuẩn hóa lỗi theo từng Pattern ở epoch đầu: $\tilde{\ell}_p(e) = \ell_p(e) / \ell_p(1)$ để khử chênh lệch thang đo biên độ tự nhiên giữa các Pattern.
+   - Chuẩn hóa lỗi theo từng Pattern ở epoch đầu: $\tilde{\ell}_{p}(e) = \ell_{p}(e) / \ell_{p}(1)$ để khử chênh lệch thang đo biên độ tự nhiên giữa các Pattern.
    - Kiểm định Kruskal-Wallis và hiệu ứng $\epsilon^2$ trên đơn vị **đoạn sự kiện liên tiếp (*contiguous event runs*)** để tránh phóng đại cỡ mẫu giả tạo do các cửa sổ trượt chồng lấn.
    - Đối chứng với **nhóm hoán vị nhãn theo khối (*block-permutation null control*)** và kiểm định khả năng dự báo $\Delta\text{loss}(e \to e+k)$ vượt trên mô hình tự hồi quy chỉ dùng loss hiện tại.
 
 4. **Phase 4 — Learning State Tracker (`src/palf/core/state.py`)**:
    - Tính toán trạng thái học cho từng Pattern chỉ từ thống kê **train** (chặn mọi khóa chứa `val` hoặc `test`):
-     - `loss_ratio`: $\tilde{\ell}_p(e) = \ell_p(e) / \ell_p(1)$ (tỷ lệ lỗi còn lại so với epoch 1).
-     - `velocity`: $(\tilde{\ell}_p(e-W) - \tilde{\ell}_p(e)) / W$ (tốc độ giảm lỗi trong cửa sổ $W$ epoch).
-     - `instability`: $\text{std}(\tilde{\ell}_p(e-W+1 \dots e))$ (độ dao động của đường cong lỗi trong cửa sổ $W$).
+     - `loss_ratio`: $\tilde{\ell}_{p}(e) = \ell_{p}(e) / \ell_{p}(1)$ (tỷ lệ lỗi còn lại so với epoch 1).
+     - `velocity`: $(\tilde{\ell}_{p}(e-W) - \tilde{\ell}_{p}(e)) / W$ (tốc độ giảm lỗi trong cửa sổ $W$ epoch).
+     - `instability`: $\text{std}(\tilde{\ell}_{p}(e-W+1 \dots e))$ (độ dao động của đường cong lỗi trong cửa sổ $W$).
 
 5. **Phase 5 — Policy Engine (`src/palf/core/policy.py`, Spec v1)**:
    - Hỗ trợ các chế độ chính sách để đối chứng công bằng:
-     - `uniform`: Mọi $w_p = 1.0$ (baseline đi qua Scheduler).
-     - `loss`: Điểm ưu tiên chỉ dùng $z(\text{loss\_ratio})$ (đối chứng thích nghi đơn giản B2 — `A1`).
-     - `predictive` (**PALF v1 — `A3` / `A3r` [không đạt ngưỡng G3]**): Dự báo độ giảm loss chuẩn hóa $\hat{y}_p = \text{intercept} + \sum_k \text{coef}_k \cdot x_{k,p}^{\text{std}}$ từ hệ số hồi quy tuyến tính đa biến ước lượng ngoài mẫu (`predictive_coef_gru_seeds34.json`), đặt $\text{raw\_need}_p = -\hat{y}_p$, chuẩn hóa z-score giữa các pattern $s_p(e) = z(\text{raw\_need}_p)$ và biến đổi hàm mũ sang trọng số:
-       $$w_{\text{new}, p} = \text{clip}\!\left(\exp(\alpha \cdot s_p(e)),\; w_{\min},\; w_{\max}\right), \quad w_p(e) = \beta\, w_p(e-1) + (1-\beta)\, w_{\text{new}, p}$$
+     - `uniform`: Mọi $w_{p} = 1.0$ (baseline đi qua Scheduler).
+     - `loss`: Điểm ưu tiên chỉ dùng chuẩn hóa z-score của `loss_ratio` là $s_{p}(e) = z(\tilde{\ell}_{p}(e))$ (đối chứng thích nghi đơn giản B2 — `A1`).
+     - `predictive` (**PALF v1 — `A3` / `A3r` [không đạt ngưỡng G3]**): Dự báo độ giảm loss chuẩn hóa từ hệ số hồi quy tuyến tính đa biến ước lượng ngoài mẫu (`predictive_coef_gru_seeds34.json`), đặt điểm nhu cầu `raw_need` là $r_{p}(e) = -\hat{y}_{p}(e)$, chuẩn hóa z-score giữa các Pattern $s_{p}(e) = z(r_{p}(e))$ và biến đổi hàm mũ sang trọng số (kèm làm mượt EMA):
+
+$$\hat{y}_{p}(e) = b_{0} + \sum_{k} b_{k} \cdot x_{k,p}^{\text{std}}(e)$$
+
+$$w_{\text{new}, p}(e) = \text{clip}\left(\exp(\alpha \cdot s_{p}(e)),\ w_{\min},\ w_{\max}\right), \quad w_{p}(e) = \beta \cdot w_{p}(e-1) + (1-\beta) \cdot w_{\text{new}, p}(e)$$
 
 6. **Phase 6 — Adaptive Scheduler (`src/palf/training/scheduler.py`, Spec v1)**:
-   - Với ngân sách $n_e = \text{round}(\rho \cdot n_{\text{train}})$ mẫu mỗi epoch:
-     - Tính tỷ lệ mục tiêu $q_p \propto w_p \cdot \pi_p$ (với $\pi_p = N_p / n_{\text{train}}$).
-     - Bảo đảm sàn tối thiểu $n_{\text{floor}} = \min(N_p, \max(32, \text{round}(0.05 \cdot \pi_p \cdot n_e)))$ để không Pattern hiếm nào bị mất tín hiệu, và phân bổ phần dư lớn nhất trên toàn bộ các nhóm có $N_p > 0$ (không cắt trần ở $N_p$) để $\sum_p n_p = n_e$.
-     - Khi $n_p \le N_p$: lấy ngẫu nhiên $n_p$ mẫu **không hoàn lại**.
-     - Khi $n_p > N_p$ (nhóm khó được tăng trọng số $w_p > 1$): lấy toàn bộ $N_p$ mẫu gốc đúng 1 lần cộng thêm $n_p - N_p$ mẫu lấy **có hoàn lại**, sau đó gộp và xáo trộn toàn cục.
+   - Với ngân sách $n_{e} = \text{round}(\rho \cdot n_{\text{train}})$ mẫu mỗi epoch:
+     - Tính tỷ lệ mục tiêu $q_{p} \propto w_{p} \cdot \pi_{p}$ với $\pi_{p} = N_{p} / n_{\text{train}}$.
+     - Bảo đảm sàn tối thiểu $n_{\text{floor}} = \min(N_{p},\ \max(32,\ \text{round}(0.05 \cdot \pi_{p} \cdot n_{e})))$ để không Pattern hiếm nào bị mất tín hiệu, và phân bổ phần dư lớn nhất trên toàn bộ các nhóm có $N_{p} > 0$ (không cắt trần ở $N_{p}$) sao cho tổng hạn ngạch bằng đúng $n_{e}$.
+     - Khi $n_{p} \le N_{p}$: lấy ngẫu nhiên $n_{p}$ mẫu **không hoàn lại**.
+     - Khi $n_{p} > N_{p}$ (nhóm khó được tăng trọng số $w_{p} > 1$): lấy toàn bộ $N_{p}$ mẫu gốc đúng 1 lần cộng thêm $n_{p} - N_{p}$ mẫu lấy **có hoàn lại**, sau đó gộp và xáo trộn toàn cục.
 
 ---
 
