@@ -14,3 +14,4 @@ experiments/results/smoke/
 cartography.csv
 **/cartography.csv
 *.pt
+pattern_stats_send/

@@ -4,3 +4,4 @@ pandas<3
 matplotlib
 streamlit
 pytest
+-e .

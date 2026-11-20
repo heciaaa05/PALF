@@ -66,7 +66,7 @@ flowchart LR
    - Hỗ trợ các chế độ chính sách để đối chứng công bằng:
      - `uniform`: Mọi $w_p = 1.0$ (baseline đi qua Scheduler).
      - `loss`: Điểm ưu tiên chỉ dùng $z(\text{loss\_ratio})$ (đối chứng thích nghi đơn giản B2 — `A1`).
-     - `predictive` (**PALF v1 — `A3` / `A3r`**): Dự báo độ giảm loss chuẩn hóa $\hat{y}_p = \text{intercept} + \sum_k \text{coef}_k \cdot x_{k,p}^{\text{std}}$ từ hệ số hồi quy tuyến tính đa biến ước lượng ngoài mẫu (`predictive_coef_gru_seeds34.json`), đặt $\text{raw\_need}_p = -\hat{y}_p$, chuẩn hóa z-score giữa các pattern $s_p(e) = z(\text{raw\_need}_p)$ và biến đổi hàm mũ sang trọng số:
+     - `predictive` (**PALF v1 — `A3` / `A3r` [không đạt ngưỡng G3]**): Dự báo độ giảm loss chuẩn hóa $\hat{y}_p = \text{intercept} + \sum_k \text{coef}_k \cdot x_{k,p}^{\text{std}}$ từ hệ số hồi quy tuyến tính đa biến ước lượng ngoài mẫu (`predictive_coef_gru_seeds34.json`), đặt $\text{raw\_need}_p = -\hat{y}_p$, chuẩn hóa z-score giữa các pattern $s_p(e) = z(\text{raw\_need}_p)$ và biến đổi hàm mũ sang trọng số:
        $$w_{\text{new}, p} = \text{clip}\!\left(\exp(\alpha \cdot s_p(e)),\; w_{\min},\; w_{\max}\right), \quad w_p(e) = \beta\, w_p(e-1) + (1-\beta)\, w_{\text{new}, p}$$
 
 6. **Phase 6 — Adaptive Scheduler (`src/palf/training/scheduler.py`, Spec v1)**:
@@ -78,16 +78,16 @@ flowchart LR
 
 ---
 
-## 3. Các kiến trúc Backbone được hỗ trợ
+## 3. Các kiến trúc Backbone & Phạm vi thực nghiệm
 
-PALF tách biệt hoàn toàn với kiến trúc mạng dự báo. Dự án tích hợp sẵn 4 họ kiến trúc tiêu biểu trong [`src/palf/models/`](file:///d:/Github/PALF/src/palf/models/__init__.py):
+PALF tách biệt hoàn toàn với kiến trúc mạng dự báo. Dự án tích hợp sẵn 4 họ kiến trúc tiêu biểu trong [`src/palf/models/`](file:///d:/Github/PALF/src/palf/models/__init__.py) với phạm vi thực nghiệm đã chạy như sau:
 
-| Tên Backbone | Mã CLI (`--model`) | Họ kiến trúc | Đặc trưng chính |
+| Tên Backbone | Mã CLI (`--model`) | Họ kiến trúc | Phạm vi thực nghiệm đã chạy trên Jena Climate |
 |---|---|---|---|
-| **GRU** | `gru` | Recurrent (RNN) | Mạng hồi quy có cổng 2 tầng, xử lý tuần tự theo bước thời gian |
-| **TCN** | `tcn` | Convolutional | Mạng tích chập nhân quả giãn nở (*dilated causal convolution*) kèm kết nối tắt |
-| **Transformer** | `transformer` | Attention (Step-wise) | Mã hóa vị trí + Multi-Head Self-Attention trên từng bước thời gian |
-| **PatchTST** | `patchtst` | Patch-based Transformer | Chia chuỗi thành các đoạn ngắn (*patches*) trước khi đưa vào Transformer |
+| **GRU** | `gru` | Recurrent (RNN) | **Backbone chính:** Baseline `A0` + Điều phối PALF (`A0s, A0w, A0r, A1, A3`) đủ **10 seed (`0..9`)**; `A3r` (`5 seed`), `E1/E2` (`3 seed`) |
+| **TCN** | `tcn` | Convolutional | **Nhân bản PALF:** Baseline `A0` (`5 seed`) + Điều phối PALF (`A0s, A1, A3`) **3 seed (`0..2`)** (`best_epoch ≈ 3` trùng hết warm-up) |
+| **Transformer** | `transformer` | Attention (Step-wise) | Baseline `A0` (`5 seed`) & Phân tích `Learning Dynamics` Phase 3 (chưa chạy điều phối PALF) |
+| **PatchTST** | `patchtst` | Patch-based Transformer | Baseline `A0` (`5 seed`) & Phân tích `Learning Dynamics` Phase 3 (chưa chạy điều phối PALF) |
 
 ---
 
@@ -96,27 +96,31 @@ PALF tách biệt hoàn toàn với kiến trúc mạng dự báo. Dự án tíc
 ```text
 PALF/
 ├── app/
-│   └── app.py                          # Giao diện Demo Streamlit (3 trang: So sánh, Quan sát PALF, Train trực tiếp)
-├── data/
-│   └── raw/                            # Thư mục tự động tải dữ liệu Jena Climate 2009-2016
+│   └── app.py                          # Giao diện Demo Streamlit (3 trang: Kết quả 10 seed & So sánh, Quan sát PALF, Chạy thu nhỏ)
 ├── experiments/
+│   ├── DEMO_SCRIPT.md                  # Kịch bản trình diễn & nội dung Slide đóng băng (30/11)
+│   ├── DEMO_CHECK.md                   # Biên bản kiểm tra chéo số liệu ứng dụng, slide & clone sạch
+│   ├── CHEAT_SHEET_DEMO.md             # Tờ ôn 1 trang cho cả 4 thành viên & Q&A
+│   ├── FREEZE_REPORT.md                # Báo cáo đóng băng phiên bản v1.0-demo (25/11)
+│   ├── RUNS.md                         # Sổ đăng ký các lần chạy thực nghiệm & hướng dẫn khôi phục sao lưu
 │   ├── analysis/
 │   │   ├── phase3_real/                # Báo cáo & CSV phân tích Phase 3 trên 20 run Baseline thật (G3)
-│   │   └── comparison/                 # Báo cáo, CSV & biểu đồ so sánh Baseline vs PALF (Mục 7)
+│   │   └── comparison/                 # Báo cáo, CSV & biểu đồ so sánh 10 seed GRU (C1–C3) & 3 seed TCN
 │   ├── results/
-│   │   ├── baseline/jena/              # Kết quả chạy Baseline A0 (<model>/seed<k>/)
 │   │   └── palf/jena/                  # Kết quả chạy PALF (<config_tag>/<model>/seed<k>/)
 │   └── scripts/
 │       ├── run_observation.py          # CLI huấn luyện Baseline & PALF trên Jena / Synthetic
 │       ├── analyze_phase3.py           # CLI chạy phân tích thống kê Phase 3
-│       ├── compare_runs.py             # CLI chạy giao thức so sánh công bằng Mục 7 (A0, A0r, A1, A2, A2r)
+│       ├── compare_runs.py             # CLI chạy giao thức so sánh công bằng (A0, A0s, A0w, A0r, A1, A3, C1–C3)
 │       └── run_pattern_audit.py        # CLI kiểm toán chất lượng Pattern Analyzer v1
+├── scripts/
+│   └── demo.ps1                        # Script PowerShell 1 dòng kiểm tra dữ liệu và mở ứng dụng Demo
 ├── src/palf/
 │   ├── core/
 │   │   ├── config.py                   # Lớp cấu hình trung tâm PalfConfig
 │   │   ├── monitor.py                  # LearningDynamicsMonitor & Dataset Cartography
 │   │   ├── state.py                    # LearningStateTracker (chỉ nhận tín hiệu train)
-│   │   └── policy.py                   # PolicyEngine & PolicyDecision (uniform, loss, state)
+│   │   └── policy.py                   # PolicyEngine & PolicyDecision (uniform, loss, predictive, loss_abs)
 │   ├── data/
 │   │   ├── pattern_features.py         # Tiền xử lý chuỗi giờ & chia tập train/val/test có purge gap
 │   │   ├── patterns_weather.py         # Pattern Analyzer v1 (4 nhãn thời tiết + temp_sign)
@@ -124,13 +128,13 @@ PALF/
 │   │   └── synthetic.py                # Bộ sinh dữ liệu chuỗi thời gian giả lập có kiểm soát
 │   ├── evaluation/
 │   │   ├── phase3_analysis.py          # Công cụ kiểm định thống kê & dự báo Phase 3
-│   │   ├── demo_loader.py              # Bộ đọc và tổng hợp dữ liệu cho giao diện Demo
-│   │   └── compare_runs.py             # Bộ tổng hợp giao thức so sánh công bằng Mục 7
+│   │   ├── demo_loader.py              # Bộ đọc CSV phân tích và kết quả cho giao diện Demo
+│   │   └── compare_runs.py             # Bộ tổng hợp giao thức so sánh công bằng & kiểm định C1–C3
 │   ├── models/                         # Định nghĩa 4 mô hình: GRU, TCN, Transformer, PatchTST
 │   └── training/
 │       ├── scheduler.py                # AdaptiveScheduler v1 (hỗ trợ lặp mẫu có hoàn lại khi n_p > N_p)
 │       └── trainer.py                  # Vòng lặp huấn luyện hợp nhất (mode="baseline" | "palf")
-└── tests/                              # 77 bài kiểm thử tự động (pytest)
+└── tests/                              # 86 bài kiểm thử tự động (pytest)
 ```
 
 ---
@@ -184,64 +188,76 @@ Bảng tổng hợp từ [`experiments/analysis/comparison/comparison_report.md`
 
 ---
 
-## 6. Hướng dẫn cài đặt & Sử dụng nhanh (PowerShell)
+## 6. Hướng dẫn cài đặt & Chạy Demo trong 3 bước (PowerShell)
 
-### 6.1. Cài đặt môi trường
+### 6.1. Chạy Demo trong 3 bước (từ bản clone mới, không cần chạy huấn luyện)
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e .
-pip install pytest
+# Bước 1: Tạo môi trường ảo và cài đặt phụ thuộc
+python -m venv .venv; .\.venv\Scripts\pip.exe install -r requirements.txt
+
+# Bước 2 (Tùy chọn): Giải nén bản sao lưu kết quả thô Baseline A0 (xem experiments/RUNS.md mục 5)
+Expand-Archive -Path C:\Users\Admin\Downloads\PALF_A0_baseline_backup_all4backbones.zip -DestinationPath . -Force
+
+# Bước 3: Mở giao diện Demo (hoặc chạy trực tiếp: .\.venv\Scripts\python.exe -m streamlit run app\app.py)
+.\scripts\demo.ps1
 ```
 
 ### 6.2. Chạy bộ kiểm thử tự động (`pytest`)
-Toàn bộ 77 bài kiểm thử kiểm tra từ chống rò rỉ dữ liệu, tính tất định của Pattern Analyzer, Monitor, Phase 3, Policy, Scheduler v1 đến giao thức so sánh:
+Toàn bộ 86 bài kiểm thử kiểm tra từ chống rò rỉ dữ liệu, tính tất định của Pattern Analyzer, Monitor, Phase 3, Policy, Scheduler v1, hoán vị trọng số `A0w` đến giao thức so sánh 10 seed (`C1–C3`):
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
 ### 6.3. Mở giao diện Demo trực quan (Streamlit)
 Giao diện gồm 3 trang (xem kịch bản trình diễn tại [`experiments/DEMO_SCRIPT.md`](file:///d:/Github/PALF/experiments/DEMO_SCRIPT.md)):
-1. **So sánh cạnh nhau (Ngoại tuyến - Kết quả chạy sẵn 30 epoch):** Đặt 2–3 lần chạy sẵn trên đĩa cạnh nhau, vẽ đường `val_loss` theo **epoch**, **số mẫu tích lũy** và **thời gian tích lũy**, bảng MAE/RMSE (°C) tổng và theo từng Pattern (`Mean ± Std` qua các seed).
-2. **Quan sát PALF:** Hiển thị trọng số `weights[p]`, tỷ lệ mẫu lịch trình (`quota_planned` share), tỷ lệ mẫu duy nhất (`n_seen` share) và các biến Learning State theo từng epoch.
-3. **CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP):** Chạy thử nghiệm nhanh trên tập con dữ liệu, lưu tách biệt vào `experiments/results/smoke/`.
+1. **So sánh cạnh nhau (Ngoại tuyến - Kết quả 10 Seed GRU & C1–C3):** Hiển thị trực tiếp từ `experiments/analysis/comparison/*.csv` bảng chính GRU 10 seed (`A0, A0s, A0r, A0w, A1, A3`), bảng 3 đối chiếu chính `C1–C3` (ngưỡng Bonferroni `0.0167`), bảng MAE theo Pattern (`Mean ± Std`), và biểu đồ đặt cạnh nhau đường `val_loss` theo **epoch** (có vạch `warmup` & `best_epoch`) của các lần chạy trên đĩa.
+2. **Quan sát PALF:** Hiển thị đường `val_loss` và trọng số `weights[p]` theo epoch (kèm vạch hết `warmup_epochs` và `best_epoch`), tỷ lệ mẫu lịch trình (`quota_planned` share), tỷ lệ mẫu duy nhất (`n_seen` share) và các biến Learning State từ `policy_log.csv`.
+3. **CHẠY THU NHỎ — chỉ minh họa:** Chạy minh họa nhanh trên tập con dữ liệu (mặc định 3 epoch, giới hạn tối đa 6 epoch, có nút dừng), lưu tách biệt vào `experiments/results/smoke/`.
 
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run app\app.py
+.\scripts\demo.ps1
 ```
 
 ### 6.4. Chạy huấn luyện qua CLI (`run_observation.py`)
-5 cấu hình tiêu chuẩn trong giao thức thực nghiệm (chi tiết trong [`experiments/RUNS.md`](file:///d:/Github/PALF/experiments/RUNS.md)):
+Các cấu hình tiêu chuẩn trong giao thức thực nghiệm (chi tiết trong [`experiments/RUNS.md`](file:///d:/Github/PALF/experiments/RUNS.md)):
 - **A0 (Baseline đầy đủ, $\rho=1.0$):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode baseline --seeds 0,1,2,3,4 --epochs 30
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode baseline --seeds 0,1,2,3,4,5,6,7,8,9 --epochs 30 --patience 5 --no-save-sample-losses
+  ```
+- **A0s (Đối chứng lấy mẫu đều qua Scheduler ở ngân sách $\rho=1.0$):**
+  ```powershell
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy uniform --budget-ratio 1.0 --seeds 0,1,2,3,4,5,6,7,8,9 --epochs 30 --patience 5 --no-save-sample-losses
+  ```
+- **A0w (Đối chứng trọng số hoán vị ngẫu nhiên theo epoch, $\rho=1.0$):**
+  ```powershell
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy loss --budget-ratio 1.0 --alpha 1.0 --w-max 3.0 --shuffle-weights --config-tag loss_shuffled_b1.0_a1.0 --seeds 0,1,2,3,4,5,6,7,8,9 --epochs 30 --patience 5 --no-save-sample-losses
   ```
 - **A0r (Đối chứng lấy mẫu đều qua Scheduler ở ngân sách giảm $\rho=0.7$):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy uniform --budget-ratio 0.7 --seeds 0,1,2 --epochs 30
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy uniform --budget-ratio 0.7 --seeds 0,1,2,3,4,5,6,7,8,9 --epochs 30 --patience 5 --no-save-sample-losses
   ```
 - **A1 (Đối chứng thích nghi chỉ dùng `loss_ratio`, $\rho=1.0$):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy loss --budget-ratio 1.0 --alpha 1.0 --w-max 3.0 --seeds 0,1,2 --epochs 30
+  .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy loss --budget-ratio 1.0 --alpha 1.0 --w-max 3.0 --seeds 0,1,2,3,4,5,6,7,8,9 --epochs 30 --patience 5 --no-save-sample-losses
   ```
-- **A3 (PALF `predictive` Learning State, cùng ngân sách $\rho=1.0$):**
+- **A3 (PALF `predictive` [không đạt ngưỡng G3], cùng ngân sách $\rho=1.0$):**
   ```powershell
   .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy predictive --predictive-coef experiments\analysis\phase3_real\predictive_coef_gru_seeds34.json --budget-ratio 1.0 --alpha 0.5 --w-max 2.0 --seeds 0,1,2 --epochs 30
   ```
-- **A3r (PALF `predictive` Learning State, giảm ngân sách $\rho=0.7$):**
+- **A3r (PALF `predictive` [không đạt ngưỡng G3], giảm ngân sách $\rho=0.7$):**
   ```powershell
   .\.venv\Scripts\python.exe experiments\scripts\run_observation.py --model gru --mode palf --policy predictive --predictive-coef experiments\analysis\phase3_real\predictive_coef_gru_seeds34.json --budget-ratio 0.7 --alpha 0.5 --w-max 2.0 --seeds 0,1,2 --epochs 30
   ```
 *(Mẹo: Khi thêm `--subset 2048 --epochs 10`, kết quả sẽ tự động được tách sang `experiments/results/smoke/`).*
 
-### 6.5. Chạy phân tích Phase 3 (kèm G3 Follow-up) và tổng hợp so sánh Mục 7
+### 6.5. Chạy phân tích Phase 3 (kèm G3 Follow-up) và tổng hợp so sánh 10 Seed
 - **Phân tích Phase 3 & Kiểm định G3 trên log Baseline thật:**
   ```powershell
   .\.venv\Scripts\python.exe experiments\scripts\analyze_phase3.py --in-dir experiments\results\baseline\jena --out-dir experiments\analysis\phase3_real --g3-followup
   ```
-- **So sánh các cấu hình Baseline vs PALF (`A0, A0r, A1, A3, A3r`):**
+- **So sánh các cấu hình Baseline vs PALF (`A0, A0s, A0w, A0r, A1, A3` trên 10 seed GRU):**
   ```powershell
-  .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru --seeds 0,1,2 --out-dir experiments\analysis\comparison
+  .\.venv\Scripts\python.exe experiments\scripts\compare_runs.py --models gru --seeds 0,1,2,3,4,5,6,7,8,9 --out-dir experiments\analysis\comparison
   ```
 
 ---
@@ -250,9 +266,9 @@ Giao diện gồm 3 trang (xem kịch bản trình diễn tại [`experiments/DE
 
 1. **Không rò rỉ tương lai hay tập đánh giá:**
    - Gán nhãn Pattern chỉ dùng cửa sổ quá khứ $X$, mọi thống kê chuẩn hóa và ngưỡng phân vị chỉ khớp trên `train`.
-   - `LearningStateTracker` và `PolicyEngine` chỉ nhận thống kê từ tập `train`; tập `val` chỉ dùng để chọn checkpoint và tính ngưỡng hội tụ; tập `test` chỉ đánh giá một lần ở cuối.
+   - `LearningStateTracker` và `PolicyEngine` chỉ nhận thống kê từ tập `train`; tập `val` chỉ dùng để chọn checkpoint; tập `test` chỉ đánh giá một lần ở cuối.
 2. **Đơn vị đo lường có ý nghĩa vật lý:**
    - Bên cạnh MSE/MAE/RMSE trên miền chuẩn hóa, mọi báo cáo và giao diện đều quy đổi sang đơn vị thực tế **độ C (°C)** tổng thể và tách theo từng Pattern (bao gồm cả tách `temp_anomaly` thành `temp_anomaly_heat` và `temp_anomaly_cold`).
 3. **Trung thực thống kê:**
-   - Đối chứng giảm ngân sách (`A2r`) luôn phải so trực tiếp với baseline lấy mẫu đều ở **cùng ngân sách** (`A0r`), không chỉ so với `A0`.
-   - Với các cấu hình có ít hơn 5 seed, báo cáo chỉ mô tả xu hướng và hiệu số ghép theo từng seed (*paired seed differences*), không tuyên bố ý nghĩa thống kê.
+   - Đối chứng giảm ngân sách (`A3r [không đạt ngưỡng G3]`) luôn phải so trực tiếp với baseline lấy mẫu đều ở **cùng ngân sách** (`A0r`), không chỉ so với `A0`.
+   - Ba phép so sánh chính (`C1: A1 - A0s`, `C2: A3 - A1`, `C3: A1 - A0w`) được kiểm định ghép cặp hai phía trên 10 seed với hiệu chỉnh Bonferroni ($\alpha = 0.05/3 = 0.0167$) và báo kèm Wilcoxon signed-rank.

@@ -5,9 +5,11 @@ import pandas as pd
 import pytest
 
 from palf.evaluation.demo_loader import (
+    check_results_availability,
     compute_time_to_target,
     compute_val_auc_samples,
     discover_saved_runs,
+    load_comparison_csv_tables,
     load_saved_run,
     summarize_palf_diagnostics,
     summarize_pattern_mae_across_seeds,
@@ -105,16 +107,15 @@ def test_demo_loader_discover_and_summarize(tmp_path):
     assert len(overall_df) == 2
     assert len(pat_df) == 8
 
-    # Kiem tra so mau toi nguong val_target = 0.51 (cot Giay toi nguong da duoc loai bo khoi bang chinh theo Prompt 8):
-    # Baseline dat <= 0.51 o epoch 3 (300 mau); PALF dat <= 0.51 o epoch 2 (140 mau)
+    # Kiem tra cac cot bi cam (time_sec_to_target, samples_to_target, overhead) khong xuat hien trong bang hien thi (Prompt 11.2):
+    for forbidden_col in ("Epoch tới ngưỡng", "Số mẫu tới ngưỡng", "Giây tới ngưỡng", "AUC Val (theo mẫu)", "overhead_sec"):
+        assert forbidden_col not in overall_df.columns
     b_row = overall_df[overall_df["Mode"] == "baseline"].iloc[0]
     p_row = overall_df[overall_df["Mode"] == "palf"].iloc[0]
-    assert b_row["Epoch tới ngưỡng"] == 3
-    assert b_row["Số mẫu tới ngưỡng"] == pytest.approx(300.0)
-    assert "Giây tới ngưỡng" not in overall_df.columns
-
-    assert p_row["Epoch tới ngưỡng"] == 2
-    assert p_row["Số mẫu tới ngưỡng"] == pytest.approx(140.0)
+    assert b_row["Test MAE (°C)"] == pytest.approx(2.0)
+    assert p_row["Test MAE (°C)"] == pytest.approx(1.8)
+    assert b_row["Tổng mẫu đã duyệt"] == 300
+    assert p_row["Tổng mẫu đã duyệt"] == 210
 
 
 def test_demo_loader_palf_diagnostics_and_missing_palf(tmp_path):
@@ -156,3 +157,34 @@ def test_summarize_pattern_mae_across_seeds(tmp_path):
     assert len(agg_df) == 8  # 2 configs x 4 patterns
     assert set(agg_df["Số seed"]) == {2}
     assert "±" in agg_df["MAE (°C) (Mean ± Std)"].iloc[0]
+
+
+def test_check_results_availability_and_load_csv_tables(tmp_path):
+    missing_info = check_results_availability(
+        baseline_root=str(tmp_path / "missing_base"),
+        palf_root=str(tmp_path / "missing_palf"),
+        comparison_dir=str(tmp_path / "missing_comp"),
+    )
+    assert missing_info["has_baseline"] is False
+    assert missing_info["has_palf"] is False
+    assert missing_info["has_comparison"] is False
+    assert "RUNS.md" in missing_info["message"]
+
+    tables = load_comparison_csv_tables("experiments/analysis/comparison")
+    assert not tables["gru_10seed_df"].empty
+    assert set(tables["gru_10seed_df"]["Mã"]) == {"A0", "A0s", "A0w", "A0r", "A1", "A3"}
+    for col in tables["gru_10seed_df"].columns:
+        assert "samples_to_target" not in col.lower()
+        assert "time_sec_to_target" not in col.lower()
+        assert "overhead" not in col.lower()
+
+    assert len(tables["c1_c3_df"]) == 3
+    assert list(tables["c1_c3_df"]["Mã"]) == ["C1", "C2", "C3"]
+    assert set(tables["c1_c3_df"]["Kết luận"]) == {"Không đạt"}
+    assert not tables["pattern_pivot_df"].empty
+    assert set(tables["pattern_pivot_df"]["Pattern"]) == {
+        "pressure_drop",
+        "humidity_net_rise",
+        "temp_anomaly",
+        "normal",
+    }

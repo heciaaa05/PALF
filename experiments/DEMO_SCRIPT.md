@@ -115,9 +115,8 @@
 | **C2** | `A3 - A1` *(Learning State vs loss)* | `+0.0075 ± 0.0192` | `5 / 5` | `+1.230` (`0.2500`) | `0.7501` | `19.0` (`0.4316`) | Không đạt |
 | **C3** | `A1 - A0w` *(loss vs trọng số ngẫu nhiên)* | `-0.0027 ± 0.0214` | `5 / 5` | `-0.400` (`0.6983`) | `1.0000` | `27.0` (`1.0000`) | Không đạt |
 
-- **Cách đọc đăng ký trước đối với `A0s` (Mục 9.1):**
-  1. **`A0s ≈ A0` (`A0s - A0 = -0.0007 ± 0.0164 °C`, nhỏ hơn nhiều độ lệch chuẩn giữa các seed `0.0161–0.0255 °C`):** Khi lấy đủ 100% mẫu mỗi epoch đúng 1 lần không hoàn lại, đường mã `AdaptiveScheduler` (`A0s`) cho kết quả trùng khít với `DataLoader` chuẩn (`A0`).
-  2. **So với `A0s`:** Cả `A1` (`-0.0211 ± 0.0142 °C`), `A3` (`-0.0148 ± 0.0118 °C`) và đối chứng giảm mẫu ngẫu nhiên `A0r` (`-0.0151 ± 0.0079 °C`) đều thấp hơn nhẹ khoảng `0.015–0.021 °C` (ghi nhận là xu hướng với cảnh báo $n=5$ nhỏ và không hiệu chỉnh đa so sánh). Tuy nhiên, **`A3 - A1 = +0.0063 ± 0.0148 °C`**, **`A3 - A0r = +0.0004 °C`** và **`A3r - A0r = +0.0021 ± 0.0043 °C`**: phần chênh lệch này xuất hiện ngay khi giảm số mẫu duy nhất mỗi epoch sau warmup (do giảm ngân sách 30% ở `A0r` hoặc lấy mẫu có hoàn lại `replacement=True` ở `A1/A3`), **chưa tách được khỏi việc chỉ giảm mẫu và không có bằng chứng cho trọng số theo Pattern**.
+> **Chữ kết luận chính thức trên Slide 5 (theo Prompt 11.4):**
+> **"Trong thiết lập này (Jena, GRU, 10 seed), chưa có bằng chứng PALF cải thiện so với lấy mẫu đều; Learning State đa biến không hơn loss đơn thuần."**
 
 #### Bảng 5B — Nhân bản trên Backbone thứ hai: TCN (`seeds 0, 1, 2` — dùng hệ số ngoài mẫu `predictive_coef_tcn_seeds34.json`, không tinh chỉnh lại siêu tham số)
 
@@ -126,40 +125,39 @@
 | **A0** | `baseline` | `1.7739 ± 0.0065` | `2.3364 ± 0.0088` | `0.0819 ± 0.0009` | `3.0` | `+0.0080 ± 0.0096` | `0.0000` |
 | **A0s** | `uniform_b1.0` | `1.7659 ± 0.0089` | `2.3335 ± 0.0124` | `0.0821 ± 0.0004` | `3.0` | `0.0000` (đối chứng) | `-0.0080 ± 0.0096` |
 | **A1** | `loss_b1.0_a1.0` | `1.7714 ± 0.0113` | `2.3441 ± 0.0156` | `0.0820 ± 0.0003` | `3.7` | `+0.0055 ± 0.0096` | `-0.0024 ± 0.0162` |
-| **A3** | `predictive_b1.0_a0.5_w2` | `1.7802 ± 0.0241` | `2.3516 ± 0.0267` | `0.0821 ± 0.0003` | `3.7` | `+0.0143 ± 0.0248` | `+0.0063 ± 0.0302` |
+| **A3** | `predictive_b1.0_a0.5_w2` *(không đạt ngưỡng G3)* | `1.7802 ± 0.0241` | `2.3516 ± 0.0267` | `0.0821 ± 0.0003` | `3.7` | `+0.0143 ± 0.0248` | `+0.0063 ± 0.0302` |
 
-- **Nhận xét nhân bản trên TCN:** TCN hội tụ sớm hơn cả GRU (`best_epoch = 3.0–3.7`). Ở `seed 0` và `seed 2`, điểm `val_loss` tốt nhất đạt ngay tại `epoch 3` (cuối `warmup_epochs = 3`), nên `A0s, A1, A3` chọn cùng checkpoint epoch 3 (`hiệu số = 0.0000 °C`); ở `seed 1` (`best_epoch = 5`), `A1` và `A3` có MAE cao hơn nhẹ so với `A0s`. Việc không có cải thiện từ trọng số Pattern lặp lại nhất quán trên kiến trúc thứ hai.
-
----
-
-### Slide 6 — "Điều chúng tôi quan sát được" (Ba sự thật thực nghiệm có số liệu)
-
-> Slide này trình bày **3 phát hiện thực nghiệm cụ thể từ log huấn luyện** giải thích vì sao điều phối lấy mẫu theo Pattern không tạo ra cải thiện trên bài toán này:
-
-1. **Quan sát 1 — Hội tụ sớm làm cửa sổ tác động của Policy rất ngắn (`1–3 epoch`):**
-   - Trên GRU, điểm `val_loss` tốt nhất đạt ở **epoch `5.2–6.4`** (trên TCN là **epoch `3.0–3.7`**), ngay sau khi kết thúc giai đoạn khởi động `warmup_epochs = 3`.
-   - Do đó, tại thời điểm lưu checkpoint tốt nhất (`best_epoch`), Policy thực chất mới chỉ can thiệp được **1–3 epoch** trên GRU (và **0–2 epoch** trên TCN). Khi thử giảm `warmup_epochs = 1` ở thí nghiệm khám phá **E1** (`seeds 0, 1, 2`), MAE tăng nhẹ lên **`1.7873 ± 0.0247 °C`** (`E1 - A3 = +0.0169 ± 0.0091 °C`) do trọng số bị biến động khi mô hình chưa ổn định ở epoch 2.
-
-2. **Quan sát 2 — Nhóm `temp_anomaly` có sai số cao nhất và KHÔNG cải thiện ở bất kỳ cấu hình nào (kể cả khi ưu tiên loss tuyệt đối ở E2):**
-   - Trên tập test (`1,730` mẫu `temp_anomaly`, gồm `1,511` mẫu nóng và `219` mẫu lạnh), sai số MAE của `temp_anomaly` luôn cao hơn `normal` khoảng `+0.19` đến `+0.25 °C` và **không giảm ở bất kỳ cấu hình nào**:
-     - Trên GRU (5 seed): `A0 = 1.9623 °C` · `A0s = 1.9466 °C` · `A0r = 1.9659 °C` · `A1 = 1.9766 °C` · `A3 = 1.9713 °C` · `A3r = 1.9806 °C`.
-     - Trên GRU (3 seed khám phá): `E1 (warmup=1) = 1.9923 °C` · **`E2 (loss_abs — ưu tiên trực tiếp loss tuyệt đối) = 1.9911 ± 0.0223 °C`** (`≈ 1,99 °C`).
-     - Trên TCN (3 seed): `A0 = 1.9502 °C` · `A0s = 1.9620 °C` · `A1 = 1.9689 °C` · `A3 = 1.9798 °C`.
-   - **Ý nghĩa:** Ngay cả khi ép Policy dồn trọng số tối đa (`w_max = 2.0`) vào `temp_anomaly` suốt quá trình học bằng `loss_abs` (**E2**), sai số của `temp_anomaly` vẫn giữ ở `1.99 °C`. Điều này chứng minh **nút cổ chai của `temp_anomaly` không nằm ở tần suất lấy mẫu**, mà do đặc tính bất đối xứng nóng/lạnh (`temp_anomaly_cold` có MAE `2.38–2.56 °C` so với `temp_anomaly_heat` `1.88–1.92 °C`) và lệch phân phối theo mùa giữa tập train và tập test.
-
-3. **Quan sát 3 — Biến `loss_ratio` chuẩn hóa về epoch 1 làm Policy hạ trọng số đúng Pattern khó nhất:**
-   - Công thức `loss_ratio(p, e) = L(p, e) / L(p, 1)` đo tốc độ giảm tương đối so với epoch 1 của chính Pattern đó.
-   - Vì `temp_anomaly` khởi đầu ở epoch 1 với loss rất lớn (`~0.243`) rồi giảm nhanh về `~0.088` (tỷ lệ `loss_ratio ≈ 0.36`, thấp nhất trong 4 nhóm dù loss tuyệt đối vẫn cao nhất), cả chính sách `loss` (`A1`) lẫn `predictive` (`A3`) đều đánh giá nhầm rằng `temp_anomaly` *"đã học xong"* và hạ trọng số của nó xuống sàn (`w_min = 0.25`) từ khoảng epoch 10 trở đi.
+- **Nhận xét nhân bản trên TCN:** TCN hội tụ sớm hơn cả GRU (`best_epoch = 3.0–3.7`). Ở `seed 0` và `seed 2`, điểm `val_loss` tốt nhất đạt ngay tại `epoch 3` (cuối `warmup_epochs = 3`), nên Policy chưa kịp tác động và `A0s, A1, A3` chọn cùng checkpoint epoch 3 (`hiệu số = 0.0000 °C`); ở `seed 1` (`best_epoch = 5`), `A1 - A0s = +0.0165 °C` và `A3 - A0s = +0.0429 °C`.
 
 ---
 
-## 5. Slide 7 — Hạn chế nói thẳng & Bước tiếp theo (30 giây)
+### Slide 6 — "Điều chúng tôi quan sát được" (Ba sự thật thực nghiệm có số liệu — Mục 11.4)
 
-1. **Phạm vi dữ liệu & kiến trúc:** Đánh giá đầy đủ 5 seed trên một bộ dữ liệu (Jena Climate) với backbone chính GRU và nhân bản 3 seed trên backbone thứ hai (TCN).
-2. **Cỡ mẫu thống kê:** 5 seed trên GRU và 3 seed trên TCN chỉ đủ để kiểm tra tính nhất quán và mô tả xu hướng, không hiệu chỉnh đa so sánh.
-3. **Nhãn Pattern dựa luật cố định:** 4 nhãn dựa luật trên cửa sổ 96 bước; tập `val/test` lệch mùa so với `train` và gộp chung dị thường nóng/lạnh vào một nhãn `temp_anomaly`.
-4. **Tín hiệu Learning Dynamics rất nhỏ (G3 lui về phương án dự phòng):** Trước khi kiểm soát epoch, $\Delta R^2 \le 0.06$; sau khi kiểm soát hiệu ứng cố định theo epoch (`controls_epoch=True`), chỉ có `2/4` backbone (`GRU, TCN`) đạt $\Delta R^2 \ge 0.02$ và dấu hệ số $\beta$ đổi chiều ở `PatchTST` (`g3_followup.md`). Hiệu ứng tăng $\Delta R^2$ khi làm mượt chuỗi (`ma3, ema`) là hiệu ứng cơ học của cửa sổ trượt chồng lấn, không dùng làm bằng chứng.
-5. **Không gian hành động:** Phiên bản v1 chỉ đổi tỷ trọng lấy mẫu theo nhóm Pattern; chưa tách nhãn dị thường nóng/lạnh, chưa điều chỉnh hàm mục tiêu hoặc trọng số loss theo mẫu.
+> Slide này trình bày **3 phát hiện thực nghiệm cụ thể từ log huấn luyện** giải thích vì sao điều phối lấy mẫu theo Pattern chưa tạo ra cải thiện trên bài toán này:
+
+1. **Quan sát 1 — Tín hiệu dự đoán `Learning Dynamics` có ở GRU/TCN, nhưng không nhất quán ở PatchTST và Transformer (`RQ1 / H1 ủng hộ một phần`):**
+   - Sau khi kiểm soát hiệu ứng cố định theo epoch (`controls_epoch=True`), các biến động học (`velocity`, `loss_trend`, `instability`) dự báo được mức thay đổi loss ở 3 epoch tiếp theo trên **GRU ($\Delta R^2 = 0.07\text{–}0.15$)** và **TCN ($\Delta R^2 = 0.07\text{–}0.09$)**, lặp lại dương khi kiểm chéo giữa các seed (GRU `0.04–0.17`, TCN `0.04–0.09`).
+   - Tuy nhiên, hiệu ứng rất yếu trên **Transformer (`0.01–0.02`)** và gần `0` trên **PatchTST (`≈ 0.005`)** với dấu hệ số đảo chiều ở một biến, nên không đạt tiêu chí G3 ($\ge 3/4$ backbone).
+
+2. **Quan sát 2 — Hội tụ sớm (`val_loss` tốt nhất ở epoch 5–6) làm cửa sổ tác động của Policy chỉ có `1–3 epoch`:**
+   - Trên GRU (10 seed), điểm `val_loss` tốt nhất đạt ở **epoch `5.3–7.6`** (trên TCN là **epoch `3.0–3.7`**), ngay sau khi kết thúc giai đoạn khởi động `warmup_epochs = 3`.
+   - Do đó, tại thời điểm lưu checkpoint tốt nhất (`best_epoch`), Policy thực chất mới chỉ can thiệp được **1–3 epoch** trên GRU (và **0–2 epoch** trên TCN). Khi thử giảm `warmup_epochs = 1` ở thí nghiệm khám phá **E1** (`seeds 0, 1, 2`), MAE là **`1.7873 ± 0.0247 °C`** (bằng `A0` trong phạm vi nhiễu).
+
+3. **Quan sát 3 — Nhóm `temp_anomaly` có sai số cao nhất và KHÔNG cải thiện ở cấu hình nào (kể cả khi ưu tiên loss tuyệt đối ở E2):**
+   - Trên tập test (`1,730` mẫu `temp_anomaly`, gồm `1,511` mẫu nóng và `219` mẫu lạnh), sai số MAE của `temp_anomaly` luôn cao hơn `normal` khoảng `+0.21` đến `+0.24 °C` và **không giảm ở bất kỳ cấu hình nào**:
+     - Trên GRU (10 seed, `summary_by_pattern.csv`): `A0 = 1.9563 ± 0.0336 °C` · `A0s = 1.9553 ± 0.0369 °C` · `A0r = 1.9642 ± 0.0179 °C` · `A0w = 1.9719 ± 0.0324 °C` · `A1 = 1.9653 ± 0.0414 °C` · `A3 = 1.9715 ± 0.0314 °C`.
+     - Trên GRU (3 seed khám phá): `E1 (warmup=1) = 1.9923 ± 0.0342 °C` · **`E2 (loss_abs — ưu tiên trực tiếp loss tuyệt đối) = 1.9911 ± 0.0223 °C`**.
+     - Trên TCN (3 seed): `A0 = 1.9502 ± 0.0505 °C` · `A0s = 1.9620 ± 0.0087 °C` · `A1 = 1.9689 ± 0.0093 °C` · `A3 = 1.9798 ± 0.0262 °C`.
+   - Ngoài ra, ở `A1/A3`, công thức chuẩn hóa `loss_ratio(p, e) = L(p, e) / L(p, 1)` làm `temp_anomaly` bị hạ về trọng số sàn (`0.25`) từ khoảng epoch 10, nhưng việc thay bằng loss tuyệt đối ở **E2** cũng không giảm sai số — gợi ý giới hạn sai số của `temp_anomaly` nằm ở đặc trưng đầu vào và sự bất đối xứng nóng/lạnh (`cold: 2.42–2.52 °C` vs `heat: 1.88–1.91 °C`).
+
+---
+
+## 5. Slide 7 — Hạn chế nói thẳng & Bước tiếp theo (30 giây — Mục 11.4)
+
+1. **Một bộ dữ liệu & 4 Pattern theo luật:** Mới đánh giá trên bộ dữ liệu Jena Climate với 4 nhãn Pattern theo luật cố định trên cửa sổ 96 giờ; tập `val/test` lệch mùa so với `train` và gộp chung dị thường nóng/lạnh vào một nhãn `temp_anomaly`.
+2. **Phạm vi kiến trúc đã chạy PALF:** Điều phối PALF mới chạy trên **GRU (đầy đủ 10 seed)** và **TCN (3 seed, nơi `best_epoch ≈ 3` trùng hết warm-up nên Policy chưa kịp tác động)**; chưa chạy điều phối PALF trên Transformer và PatchTST (Baseline `A0` và Phase 3 đã chạy đủ 4 kiến trúc × 5 seed).
+3. **Một hành động duy nhất:** Bản v1 chỉ có một hành động là đổi tỷ trọng lấy mẫu theo nhóm Pattern; chưa có `Skip`, `Replay` cấp mẫu hay Policy học được.
+4. **Cửa sổ học ngắn:** Mô hình đạt `best_val_loss` ở epoch sớm (`epoch 5–6` trên GRU, `epoch 3` trên TCN); kết quả có thể khác với lịch huấn luyện có cửa sổ học dài hơn (giảm `lr`, thêm điều chuẩn).
 
 ---
 
@@ -169,7 +167,7 @@
 |---|---|
 | **1. Khác gì Curriculum Learning?** | Curriculum thường sắp xếp thứ tự độ khó cố định đặt trước. PALF quyết định động sau mỗi epoch dựa trên trạng thái học (`Learning State`) đo trực tiếp từ mô hình theo từng nhóm Pattern *(tương đồng hướng tiếp cận learning progress của Graves et al., 2017 nhưng áp dụng ở cấp Pattern chuỗi thời gian)*. |
 | **2. Khác gì Dataset Cartography?** | Dataset Cartography (Swayamdipta et al., 2020) phân tích mẫu khó/dễ **sau khi đã huấn luyện xong** toàn bộ các epoch. PALF theo dõi và điều phối lấy mẫu **ngay trong lúc huấn luyện** ở cấp độ nhóm Pattern. |
-| **3. Pattern có phải là patch của PatchTST không?** | **Không.** Pattern là nhãn ngữ nghĩa vật lý của **cả cửa sổ đầu vào 96 bước (16 giờ)** theo quy tắc phân vị; còn patch là các đoạn con cắt nhỏ bên trong kiến trúc PatchTST. |
+| **3. Pattern có phải là patch của PatchTST không?** | **Không.** Pattern là nhãn ngữ nghĩa vật lý của **cả cửa sổ đầu vào 96 bước (96 giờ)** theo quy tắc phân vị; còn patch là các đoạn con cắt nhỏ bên trong kiến trúc PatchTST. |
 | **4. Vì sao chỉ có 4 nhãn Pattern?** | Được lọc theo tiêu chí tiền đăng ký ở Phase 1–2 trên tập `train` (đủ số sự kiện độc lập $N_{\text{eff}}$, tỷ lệ `normal` hợp lý, ổn định ngưỡng). Nhãn `spike` đã bị loại bỏ từ Phase 1 vì chỉ có 6 sự kiện độc lập, không đủ cỡ mẫu kiểm định. |
 | **5. Có rò rỉ dữ liệu (data leakage) không?** | **Không.** Chia theo thời gian `70/15/15` có khoảng đệm `purge_gap = 119` bước; mọi ngưỡng phân vị và `climatology` chỉ tính từ `train`; nhãn Pattern chỉ nhìn đầu vào $X$ (không nhìn $Y$); `PolicyEngine` chỉ nhận thống kê `train` (đã có unit test kiểm chứng tự động). |
 | **6. Việc lặp mẫu (`replacement=True`) có làm mô hình học thuộc lòng không?** | Trọng số bị chặn trong `[w_min, w_max]` (`[0.25, 2.0]` ở `A3`), làm mượt EMA ($\gamma=0.3$), và được kiểm chứng công bằng bằng các đối chứng cùng ngân sách mẫu (`A0s` ở ngân sách `1.0`, `A0r` ở ngân sách `0.7`). |

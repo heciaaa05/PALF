@@ -191,11 +191,7 @@ def summarize_side_by_side(
     for r in selected_runs:
         hist = r["history"]
         tm = r["test_metrics"]
-        ttt = compute_time_to_target(hist, val_target)
-        auc_s = compute_val_auc_samples(hist)
         tot_samples = int(hist["n_samples_processed"].sum())
-        tot_time = float(hist["epoch_time_sec"].sum())
-        tot_ov = float(hist["overhead_sec"].sum())
 
         overall_rows.append({
             "Run": r["label"],
@@ -207,9 +203,6 @@ def summarize_side_by_side(
             "Test RMSE (°C)": float(tm.get("rmse_degC", np.nan)),
             "Best Val Loss": float(hist["val_loss"].min()),
             "Best Epoch": int(tm.get("best_epoch", hist.loc[hist["val_loss"].idxmin(), "epoch"])),
-            "Epoch tới ngưỡng": ttt["epoch_to_target"],
-            "Số mẫu tới ngưỡng": ttt["samples_to_target"],
-            "AUC Val (theo mẫu)": auc_s,
             "Tổng mẫu đã duyệt": tot_samples,
         })
 
@@ -384,3 +377,142 @@ def summarize_pattern_mae_across_seeds(saved_runs: List[dict], model_filter: Opt
             "RMSE (°C) (Mean ± Std)": f"{r_mean:.4f} ± {r_std:.4f}",
         })
     return pd.DataFrame(out_rows)
+
+
+def check_results_availability(
+    baseline_root: str = "experiments/results/baseline/jena",
+    palf_root: str = "experiments/results/palf/jena",
+    comparison_dir: str = "experiments/analysis/comparison",
+) -> dict:
+    """Kiem tra tinh trang cac thu muc ket qua tren dia; neu thieu thu muc lon da .gitignore
+    thi tra ve thong bao huong dan giai nen ban sao luu theo RUNS.md muc 5, khong bao loi stack trace."""
+    has_baseline = os.path.isdir(baseline_root) and any(
+        os.path.isdir(os.path.join(baseline_root, d)) for d in os.listdir(baseline_root)
+    )
+    has_palf = os.path.isdir(palf_root) and any(
+        os.path.isdir(os.path.join(palf_root, d)) for d in os.listdir(palf_root)
+    )
+    has_comparison = (
+        os.path.isdir(comparison_dir)
+        and os.path.isfile(os.path.join(comparison_dir, "summary_overall.csv"))
+        and os.path.isfile(os.path.join(comparison_dir, "primary_comparisons_prompt10.csv"))
+        and os.path.isfile(os.path.join(comparison_dir, "summary_by_pattern.csv"))
+    )
+
+    missing_items = []
+    if not has_baseline:
+        missing_items.append(baseline_root)
+    if not has_palf:
+        missing_items.append(palf_root)
+    if not has_comparison:
+        missing_items.append(comparison_dir)
+
+    if missing_items:
+        missing_str = ", ".join(f"`{m}`" for m in missing_items)
+        message = (
+            f"Thiếu dữ liệu {missing_str}, giải nén bản sao lưu theo `experiments/RUNS.md` mục 5 "
+            f"(ví dụ: `Expand-Archive -Path C:\\Users\\Admin\\Downloads\\PALF_A0_baseline_backup_all4backbones.zip -DestinationPath . -Force`)."
+        )
+    else:
+        message = "Đầy đủ dữ liệu kết quả và bảng phân tích."
+
+    return {
+        "has_baseline": has_baseline,
+        "has_palf": has_palf,
+        "has_comparison": has_comparison,
+        "missing_items": missing_items,
+        "message": message,
+    }
+
+
+def load_comparison_csv_tables(
+    comparison_dir: str = "experiments/analysis/comparison",
+) -> dict:
+    """Doc truc tiep cac bang ket qua chinh thuc tu experiments/analysis/comparison/*.csv (khong hard-code).
+    Khong hien time_sec_to_target, samples_to_target, hay overhead thoi gian."""
+    overall_csv = os.path.join(comparison_dir, "summary_overall.csv")
+    c13_csv = os.path.join(comparison_dir, "primary_comparisons_prompt10.csv")
+    pat_csv = os.path.join(comparison_dir, "summary_by_pattern.csv")
+
+    gru_10seed_df = pd.DataFrame()
+    c1_c3_df = pd.DataFrame()
+    pattern_10seed_df = pd.DataFrame()
+    pattern_pivot_df = pd.DataFrame()
+
+    if os.path.isfile(overall_csv):
+        raw_ov = pd.read_csv(overall_csv)
+        if not raw_ov.empty:
+            ov_rows = []
+            for _, r in raw_ov.iterrows():
+                cfg = str(r.get("config_tag", ""))
+                code = str(r.get("code", ""))
+                disp_cfg = _CODE_MAP.get(cfg, f"{code} ({cfg})")
+                ov_rows.append({
+                    "Backbone": str(r.get("model", "gru")).upper(),
+                    "Mã": code,
+                    "Cấu hình": disp_cfg,
+                    "Số seed": int(r.get("n_seeds", 0)),
+                    "Test MAE (°C) (Mean ± Std)": f"{float(r['mae_degC_mean']):.4f} ± {float(r['mae_degC_std']):.4f}",
+                    "Test RMSE (°C) (Mean ± Std)": f"{float(r['rmse_degC_mean']):.4f} ± {float(r['rmse_degC_std']):.4f}",
+                    "Best Val Loss (Mean ± Std)": f"{float(r['best_val_loss_mean']):.4f} ± {float(r['best_val_loss_std']):.4f}",
+                    "Best Epoch": f"{float(r['best_epoch_mean']):.1f}",
+                })
+            gru_10seed_df = pd.DataFrame(ov_rows)
+
+    if os.path.isfile(c13_csv):
+        raw_c = pd.read_csv(c13_csv)
+        if not raw_c.empty:
+            c_rows = []
+            for _, r in raw_c.iterrows():
+                cid = str(r.get("comparison_id", ""))
+                code = str(r.get("code", ""))
+                ref_code = str(r.get("ref_code", ""))
+                n_seeds = int(r.get("n_seeds", 10))
+                n_neg = int(r.get("n_neg", 0))
+                sig = bool(r.get("bonferroni_significant", False))
+                c_rows.append({
+                    "Mã": cid,
+                    "Đối chiếu": f"{code} − {ref_code}",
+                    "Hiệu MAE (°C) (Mean ± Std)": f"{float(r['diff_mean']):+.4f} ± {float(r['diff_std']):.4f}",
+                    "Số seed âm": f"{n_neg}/{n_seeds}",
+                    "t-stat": f"{float(r['t_stat']):+.3f}",
+                    "p (t)": f"{float(r['t_pvalue']):.4f}",
+                    "p (Bonferroni)": f"{float(r['p_bonferroni']):.4f}",
+                    "Wilcoxon p": f"{float(r['wilcoxon_pvalue']):.4f}",
+                    "Ngưỡng α (Bonferroni)": "0.0167",
+                    "Kết luận": "Đạt" if sig else "Không đạt",
+                })
+            c1_c3_df = pd.DataFrame(c_rows)
+
+    if os.path.isfile(pat_csv):
+        raw_p = pd.read_csv(pat_csv)
+        if not raw_p.empty:
+            main_p = raw_p[raw_p["group_type"] == "main_pattern"].copy()
+            p_rows = []
+            for _, r in main_p.iterrows():
+                cfg = str(r.get("config_tag", ""))
+                code = str(r.get("code", ""))
+                p_rows.append({
+                    "Backbone": str(r.get("model", "gru")).upper(),
+                    "Mã": code,
+                    "Cấu hình": _CODE_MAP.get(cfg, f"{code} ({cfg})"),
+                    "Pattern": str(r.get("pattern", "")),
+                    "Số seed": int(r.get("n_seeds", 10)),
+                    "Số mẫu test": int(r.get("n_test", 0)),
+                    "MAE (°C) (Mean ± Std)": f"{float(r['mae_degC_mean']):.4f} ± {float(r['mae_degC_std']):.4f}",
+                    "RMSE (°C) (Mean ± Std)": f"{float(r['rmse_degC_mean']):.4f} ± {float(r['rmse_degC_std']):.4f}",
+                })
+            pattern_10seed_df = pd.DataFrame(p_rows)
+            if not pattern_10seed_df.empty:
+                code_cols = [c for c in ["A0", "A0s", "A0r", "A0w", "A1", "A3"] if c in pattern_10seed_df["Mã"].values]
+                piv = pattern_10seed_df.pivot(index="Pattern", columns="Mã", values="MAE (°C) (Mean ± Std)")
+                if code_cols:
+                    piv = piv[[c for c in code_cols if c in piv.columns]]
+                pattern_pivot_df = piv.reset_index()
+
+    return {
+        "gru_10seed_df": gru_10seed_df,
+        "c1_c3_df": c1_c3_df,
+        "pattern_10seed_df": pattern_10seed_df,
+        "pattern_pivot_df": pattern_pivot_df,
+    }

@@ -1,4 +1,11 @@
 import os
+import sys
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+_SRC_DIR = os.path.join(_REPO_ROOT, "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
@@ -7,7 +14,9 @@ from torch.utils.data import TensorDataset
 from palf.core.config import PalfConfig
 from palf.data import prepare_data, prepare_weather_data
 from palf.evaluation.demo_loader import (
+    check_results_availability,
     discover_saved_runs,
+    load_comparison_csv_tables,
     summarize_overall_across_seeds,
     summarize_palf_diagnostics,
     summarize_pattern_mae_across_seeds,
@@ -152,14 +161,19 @@ def render_result(res):
 page = st.radio(
     "Chọn trang hiển thị",
     [
-        "1. So sánh cạnh nhau (Ngoại tuyến - Kết quả chạy sẵn 30 epoch)",
+        "1. So sánh cạnh nhau (Ngoại tuyến - Kết quả 10 Seed GRU & C1–C3)",
         "2. Quan sát PALF (Trọng số, Tỷ lệ mẫu & Learning State)",
-        "3. CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP)",
+        "3. CHẠY THU NHỎ — chỉ minh họa",
     ],
     horizontal=True,
 )
 st.divider()
 
+avail_info = check_results_availability()
+if avail_info["missing_items"]:
+    st.warning(f"ℹ️ {avail_info['message']}")
+
+csv_tables = load_comparison_csv_tables()
 saved_runs = discover_saved_runs()
 run_map = {r["label"]: r for r in saved_runs}
 
@@ -167,15 +181,45 @@ run_map = {r["label"]: r for r in saved_runs}
 # TRANG 1: SO SANH CANH NHAU (NGOAI TUYEN)
 # =====================================================================
 if page.startswith("1."):
-    st.subheader("So sánh cạnh nhau giữa các lần chạy sẵn 30 epoch trên đĩa")
+    st.subheader("Kết quả Kiểm định 10 Seed trên GRU (`C1–C3`) & So sánh cạnh nhau")
     st.caption(
-        "Chế độ mặc định (ngoại tuyến): đọc trực tiếp các lần chạy thật 30 epoch từ "
-        "`experiments/results/baseline/jena` và `experiments/results/palf/jena` "
-        "(tách biệt hoàn toàn khỏi các lần chạy thu nhỏ trong `experiments/results/smoke/`)."
+        "Mọi số liệu tổng hợp dưới đây được đọc trực tiếp từ `experiments/analysis/comparison/*.csv` "
+        "và các thư mục kết quả `experiments/results/` (không hard-code, không hiển thị `samples_to_target`, "
+        "`time_sec_to_target` hay overhead thời gian)."
     )
 
+    if not csv_tables["gru_10seed_df"].empty:
+        st.markdown("#### 1. Bảng chính GRU, 10 Seed (`seeds 0..9` — `A0, A0s, A0r, A0w, A1, A3`)")
+        st.dataframe(csv_tables["gru_10seed_df"], hide_index=True, use_container_width=True)
+
+    if not csv_tables["c1_c3_df"].empty:
+        st.markdown("#### 2. Ba đối chiếu chính đã đăng ký trước (`C1–C3`, ngưỡng Bonferroni α = 0.05/3 = 0.0167)")
+        st.dataframe(csv_tables["c1_c3_df"], hide_index=True, use_container_width=True)
+        st.info(
+            "**Kết luận đóng băng:** Trong thiết lập này (Jena, GRU, 10 seed), chưa có bằng chứng PALF cải thiện "
+            "so với lấy mẫu đều (`C1: p_t = 0.2974 >= 0.0167`, `C3: p_t = 0.6983 >= 0.0167`); Learning State đa biến "
+            "không hơn loss đơn thuần (`C2: p_t = 0.2500 >= 0.0167`). Mọi chênh lệch nhỏ giữa các cấu hình đều nằm "
+            "trong phạm vi biến động giữa các seed."
+        )
+
+    if not csv_tables["pattern_pivot_df"].empty:
+        st.markdown("#### 3. Test MAE (°C) theo từng Pattern trên GRU (10 Seed, `Mean ± Std`)")
+        st.caption(
+            "Độ lệch chuẩn giữa các seed (`0.02–0.05 °C`) lớn hơn mọi chênh lệch giữa các cấu hình; "
+            "`temp_anomaly` có sai số cao nhất ở mọi cấu hình (`~1.96–1.97 °C`)."
+        )
+        st.dataframe(csv_tables["pattern_pivot_df"], hide_index=True, use_container_width=True)
+        with st.expander("Xem bảng chi tiết MAE & RMSE (°C) theo Pattern (10 seed GRU)"):
+            st.dataframe(csv_tables["pattern_10seed_df"], hide_index=True, use_container_width=True)
+
+    st.divider()
+    st.markdown("#### 4. Đặt cạnh nhau các lần chạy 30 epoch trên đĩa (Đường `val_loss` theo Epoch)")
+
     if not saved_runs:
-        st.warning("Chưa có kết quả nào trong `experiments/results/`. Hãy chạy `run_observation.py` trước.")
+        st.warning(
+            "Thiếu dữ liệu các lần chạy chi tiết trong `experiments/results/`, giải nén bản sao lưu theo "
+            "`experiments/RUNS.md` mục 5."
+        )
     else:
         col_f1, col_f2 = st.columns([1, 3])
         with col_f1:
@@ -211,27 +255,22 @@ if page.startswith("1."):
             st.info("Vui lòng chọn ít nhất 1 lần chạy để hiển thị.")
         else:
             chosen_runs = [run_map[lb] for lb in chosen_labels]
-            overall_df, pat_df, default_target = summarize_side_by_side(chosen_runs)
+            overall_df, pat_df, _ = summarize_side_by_side(chosen_runs)
 
-            custom_target = st.number_input(
-                "Ngưỡng `val_target` (mặc định = 1.02 × best val loss của lần chạy đối chứng đầu tiên):",
-                value=float(round(default_target, 5)),
-                step=0.001,
-                format="%.5f",
-            )
-            overall_df, pat_df, _ = summarize_side_by_side(chosen_runs, val_target=custom_target)
-
-            st.markdown("#### Bảng tổng hợp: Test MAE/RMSE (°C) & Tốc độ đạt ngưỡng Val (theo Epoch / Số mẫu)")
+            st.markdown("##### Bảng thông số của các lần chạy đang chọn")
             st.dataframe(overall_df, hide_index=True, use_container_width=True)
 
             c_plot0, c_plot1 = st.columns(2)
             with c_plot0:
-                st.markdown("#### 1. Đường `val_loss` theo **Epoch**")
+                st.markdown("##### Đường `val_loss` theo **Epoch** (kèm mốc hết `warmup` & `best_epoch`)")
                 fig0, ax0 = plt.subplots(figsize=(6.5, 4.0))
+                ax0.axvline(3, color="#d97706", linestyle="--", linewidth=1.3, label="Hết warm-up (ep 3)")
                 for r in chosen_runs:
                     h = r["history"]
-                    ax0.plot(h["epoch"], h["val_loss"], marker="o", markersize=3, label=r["label"])
-                ax0.axhline(custom_target, color="red", linestyle="--", linewidth=1, label=f"val_target={custom_target:.4f}")
+                    tm = r.get("test_metrics", {})
+                    b_ep = int(tm.get("best_epoch", h.loc[h["val_loss"].idxmin(), "epoch"]))
+                    line_objs = ax0.plot(h["epoch"], h["val_loss"], marker="o", markersize=3, label=f"{r['label']} (best ep {b_ep})")
+                    ax0.axvline(b_ep, color=line_objs[0].get_color(), linestyle=":", linewidth=1.2, alpha=0.8)
                 ax0.set_xlabel("Epoch")
                 ax0.set_ylabel("Validation MSE (chuẩn hóa)")
                 ax0.grid(True, alpha=0.3)
@@ -241,12 +280,11 @@ if page.startswith("1."):
                 plt.close(fig0)
 
             with c_plot1:
-                st.markdown("#### 2. Đường `val_loss` theo **Số mẫu tích lũy**")
+                st.markdown("##### Đường `val_loss` theo **Số mẫu tích lũy**")
                 fig1, ax1 = plt.subplots(figsize=(6.5, 4.0))
                 for r in chosen_runs:
                     h = r["history"]
                     ax1.plot(h["cum_samples"], h["val_loss"], marker="o", markersize=3, label=r["label"])
-                ax1.axhline(custom_target, color="red", linestyle="--", linewidth=1, label=f"val_target={custom_target:.4f}")
                 ax1.set_xlabel("Số mẫu train tích lũy (cumulative samples)")
                 ax1.set_ylabel("Validation MSE (chuẩn hóa)")
                 ax1.grid(True, alpha=0.3)
@@ -255,7 +293,7 @@ if page.startswith("1."):
                 st.pyplot(fig1)
                 plt.close(fig1)
 
-            st.markdown("#### Bảng MAE và RMSE (°C) trên tập Test theo từng Pattern (của các lần chạy đang chọn)")
+            st.markdown("##### Bảng MAE và RMSE (°C) trên tập Test theo từng Pattern (của các lần chạy đang chọn)")
             if not pat_df.empty:
                 c_tb1, c_tb2 = st.columns(2)
                 with c_tb1:
@@ -267,15 +305,13 @@ if page.startswith("1."):
                     rmse_piv = pat_df.pivot(index="Pattern", columns="Run", values="RMSE (°C)")
                     st.dataframe(rmse_piv, use_container_width=True)
 
-            st.markdown("#### Bảng tổng hợp toàn cục qua các Seed (`Mean ± Std` — bao gồm `A0, A0s, A0r, A1, A3, A3r, E1, E2`)")
-            agg_overall_df = summarize_overall_across_seeds(saved_runs, model_filter=sel_model)
-            if not agg_overall_df.empty:
-                st.dataframe(agg_overall_df, hide_index=True, use_container_width=True)
-
-            st.markdown("#### Bảng tổng hợp Test MAE & RMSE (°C) theo Pattern qua các Seed (`Mean ± Std`)")
-            agg_pat_df = summarize_pattern_mae_across_seeds(saved_runs, model_filter=sel_model)
-            if not agg_pat_df.empty:
-                st.dataframe(agg_pat_df, hide_index=True, use_container_width=True)
+            with st.expander("Bảng tổng hợp toàn bộ các lần chạy có trên đĩa theo bộ lọc Backbone (`Mean ± Std`)"):
+                agg_overall_df = summarize_overall_across_seeds(saved_runs, model_filter=sel_model)
+                if not agg_overall_df.empty:
+                    st.dataframe(agg_overall_df, hide_index=True, use_container_width=True)
+                agg_pat_df = summarize_pattern_mae_across_seeds(saved_runs, model_filter=sel_model)
+                if not agg_pat_df.empty:
+                    st.dataframe(agg_pat_df, hide_index=True, use_container_width=True)
 
 # =====================================================================
 # TRANG 2: QUAN SAT PALF
@@ -395,15 +431,16 @@ elif page.startswith("2."):
 # TRANG 3: HUAN LUYEN TRUC TIEP (QUY MO NHO / SMOKE)
 # =====================================================================
 else:
-    st.subheader("CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP)")
+    st.subheader("CHẠY THU NHỎ — chỉ minh họa")
     st.warning(
-        "⚠️ **CHẠY THU NHỎ (SMOKE / DEMO TRỰC TIẾP):** Huấn luyện trực tiếp trên giao diện chỉ dành cho thử nghiệm "
-        "nhanh với ít epoch và tập con dữ liệu (`subset`). Mọi kết quả ở trang này được lưu tách biệt sang "
-        "`experiments/results/smoke/` và **không ghi đè hay trộn lẫn** vào danh sách thực nghiệm thật 30 epoch."
+        "⚠️ **CHẠY THU NHỎ — chỉ minh họa:** Huấn luyện trực tiếp trên giao diện chỉ dành cho minh họa "
+        "vòng lặp hoạt động với ít epoch (mặc định 3 epoch, tối đa 6 epoch) và tập con dữ liệu (`subset`). "
+        "Mọi kết quả ở trang này được lưu tách biệt sang `experiments/results/smoke/` và **không ghi đè hay trộn lẫn** "
+        "vào danh sách thực nghiệm thật 30 epoch."
     )
 
     with st.sidebar:
-        st.header("Dữ liệu (CHẠY THU NHỎ / SMOKE)")
+        st.header("Dữ liệu (CHẠY THU NHỎ — chỉ minh họa)")
         source = st.radio("Nguồn dữ liệu", ["Giả lập (nhanh)", "Thời tiết thật (Jena, Đức)"])
         target_label = None
         subset_size = None
@@ -411,8 +448,8 @@ else:
             target_label = st.selectbox("Biến mục tiêu", list(WEATHER_TARGETS.keys()))
             subset_size = st.select_slider(
                 "Giới hạn số mẫu (quy mô nhỏ)",
-                options=[512, 1024, 2048, 4096],
-                value=1024,
+                options=[512, 1024, 2048],
+                value=512,
             )
 
         st.header("Chế độ & Cấu hình PALF")
@@ -422,9 +459,9 @@ else:
         alpha = 1.0
         w_min, w_max = 0.25, 3.0
         ema_beta = 0.5
-        warmup_epochs = 3
+        warmup_epochs = 1
         update_every = 1
-        window = 3
+        window = 2
 
         if train_mode == "palf":
             policy_name = st.selectbox(
@@ -438,14 +475,14 @@ else:
                 w_min = st.number_input("w_min", value=0.25, min_value=0.05, max_value=1.0, step=0.05)
                 w_max = st.number_input("w_max", value=3.0, min_value=1.0, max_value=10.0, step=0.5)
                 ema_beta = st.slider("EMA beta", 0.0, 0.9, 0.5, 0.1)
-                warmup_epochs = st.number_input("Warm-up epochs", value=3, min_value=1, max_value=10, step=1)
-                update_every = st.number_input("Update every (epoch)", value=1, min_value=1, max_value=10, step=1)
-                window = st.number_input("Window W", value=3, min_value=1, max_value=10, step=1)
+                warmup_epochs = st.number_input("Warm-up epochs", value=1, min_value=1, max_value=4, step=1)
+                update_every = st.number_input("Update every (epoch)", value=1, min_value=1, max_value=4, step=1)
+                window = st.number_input("Window W", value=2, min_value=1, max_value=4, step=1)
 
         st.header("Cấu hình Backbone")
         model_name = st.selectbox("Loại model", list(MODEL_REGISTRY.keys()))
         st.caption(MODEL_INFO[model_name])
-        epochs = st.slider("Số epoch", 2, 30, 8)
+        epochs = st.slider("Số epoch (giới hạn chạy thu nhỏ)", 2, 6, 3)
         batch = st.selectbox("Batch size", [32, 64, 128, 256], index=2)
         lr = st.select_slider(
             "Learning rate",
@@ -455,9 +492,16 @@ else:
         )
         device_name = st.selectbox("Thiết bị", ["cpu", "dml", "cuda"])
         seed = st.number_input("Seed", value=0, step=1)
-        run = st.button("Bắt đầu train", type="primary")
-        clear = st.button("Xóa kết quả")
+        b_col1, b_col2 = st.columns(2)
+        with b_col1:
+            run = st.button("Bắt đầu train", type="primary", use_container_width=True)
+        with b_col2:
+            stop_run = st.button("Dừng chạy", use_container_width=True)
+        clear = st.button("Xóa kết quả", use_container_width=True)
 
+    if stop_run:
+        st.warning("Đã dừng lượt chạy thu nhỏ theo yêu cầu.")
+        st.stop()
     if clear:
         st.session_state["results"] = []
 
