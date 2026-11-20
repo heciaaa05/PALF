@@ -1,5 +1,7 @@
 # Sổ đăng ký các lần chạy thực nghiệm (RUNS Registry)
 
+- **Phiên bản đóng băng Demo (`30/11`):** Tag **`v1.0-demo`** · Commit **`23794be`** (`23794bea3368b9004903973a98a7b53769149f55`, kết quả thực nghiệm 10 seed đóng băng tại `2c838ed`).
+
 Tài liệu này ghi nhận toàn bộ các lần chạy thực nghiệm chính thức (toàn bộ tập Jena Climate: `n_train = 48,981`, `n_val = 10,377`, `n_test = 10,377`, `batch = 128`, `lr = 1e-3`, `device = cpu`) dùng trong báo cáo và giao diện demo.
 
 > **Quy tắc tách biệt & định danh G3:**

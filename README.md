@@ -1,5 +1,7 @@
 # PALF — Pattern-Aware Learning Framework
 
+> **Phiên bản đóng băng Demo (`30/11`):** Tag **`v1.0-demo`** · Commit **`23794be`** (`23794bea3368b9004903973a98a7b53769149f55`, kế thừa kết quả thực nghiệm đóng băng tại `2c838ed`). Xem [`experiments/FREEZE_REPORT.md`](file:///d:/Github/PALF/experiments/FREEZE_REPORT.md) và [`experiments/DEMO_CHECK.md`](file:///d:/Github/PALF/experiments/DEMO_CHECK.md).
+
 **PALF (Pattern-Aware Learning Framework)** là một khung huấn luyện thích nghi độc lập kiến trúc (*model-agnostic adaptive training framework*) dành cho bài toán dự báo chuỗi thời gian (*time-series forecasting*).
 
 Thay vì đối xử đồng đều với mọi cửa sổ thời gian trong suốt quá trình huấn luyện (như cách lấy mẫu ngẫu nhiên truyền thống `DataLoader(shuffle=True)`), PALF tự động phân loại các cửa sổ đầu vào thành các **Pattern** có ý nghĩa vật lý, theo dõi **động lực học (Learning Dynamics)** của từng Pattern sau mỗi epoch, và điều chỉnh **tỷ lệ lấy mẫu theo Pattern (reweighting & sample budgeting)** ở các epoch tiếp theo.

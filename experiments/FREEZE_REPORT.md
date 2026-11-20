@@ -1,8 +1,9 @@
 # Báo cáo Đóng băng Dự án PALF (FREEZE_REPORT — Mốc 25/11 & Demo 30/11)
 
 - **Thẻ phát hành (Git Tag):** `v1.0-demo` (`"PALF demo 30/11"`)
+- **Commit đóng băng:** `23794be` (`23794bea3368b9004903973a98a7b53769149f55`, kết quả thực nghiệm 10 seed tại `2c838ed`)
 - **Nhánh chính:** `main`
-- **Bộ kiểm thử tự động (`pytest -q`):** **`86 passed in 33.25s`** (`0 failed`)
+- **Bộ kiểm thử tự động (`pytest -q`):** **`86 passed in 29.09s`** (`0 failed`)
 - **Quy tắc sau đóng băng:** Từ mốc đóng băng `v1.0-demo`, không chạy thêm thực nghiệm, không đổi tham số, không đổi kết luận. Mọi thay đổi (nếu có) chỉ giới hạn ở sửa lỗi hiển thị hoặc lỗi chạy và phải ghi rõ lý do trong commit.
 
 ---
